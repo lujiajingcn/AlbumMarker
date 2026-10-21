@@ -3,7 +3,8 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- 带标记的列表，表示「从标签目录中选择」 -->
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M16,1H4c-1.1,0 -2,0.9 -2,2v14h2V3h12V1zM19,5H8c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h11c1.1,0 2,-0.9 2,-2V7c0,-1.1 -0.9,-2 -2,-2zM19,19H8V7h11v14z" />
+        android:pathData="M4,4h4v4H4z M10,5h10v2H10z M4,10h4v4H4z M10,11h10v2H10z M4,16h4v4H4z M10,17h10v2H10z" />
 </vector>

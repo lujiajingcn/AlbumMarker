@@ -2,11 +2,6 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
-        android:id="@+id/action_copy_hash"
-        android:icon="@drawable/ic_content_copy"
-        android:title="@string/copy_hash"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/action_model_manage"
         android:icon="@drawable/ic_memory"
         android:title="@string/title_model_manage"

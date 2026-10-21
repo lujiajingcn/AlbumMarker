@@ -1,8 +1,5 @@
 package com.albummarker
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -21,16 +18,20 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.albummarker.data.MediaItem
 import com.albummarker.data.MediaHasher
 import com.albummarker.data.MediaQuery
+import com.albummarker.data.TagCatalog
 import com.albummarker.data.TagEmbedder
 import com.albummarker.data.TagEntry
 import com.albummarker.data.TagParser
 import com.albummarker.data.model.AutoTagEngine
 import com.albummarker.databinding.ActivityMediaViewerBinding
 import com.albummarker.ui.MediaPagerAdapter
+import com.albummarker.ui.TagTreeAdapter
 import com.albummarker.ui.ViewerViewModel
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -135,6 +136,7 @@ class MediaViewerActivity : AppCompatActivity() {
         })
 
         binding.btnOverflow.setOnClickListener { showOverflowMenu(it) }
+        binding.btnSelectTags.setOnClickListener { showTagPickerDialog() }
         binding.btnManualTag.setOnClickListener { toggleManualPanel() }
         binding.btnAutoTag.setOnClickListener { onAutoTagClicked() }
         binding.btnVoice.setOnClickListener { startVoiceInput() }
@@ -316,6 +318,68 @@ class MediaViewerActivity : AppCompatActivity() {
         }
     }
 
+    // ---- 从标签目录选择 ----
+
+    /**
+     * 树形标签目录弹窗：按主题展开，可多选；确认后把选中的标签作为手动标签写入当前媒体。
+     * 已存在的标签在树里显示为「已添加」并禁用，避免重复勾选。
+     */
+    private fun showTagPickerDialog() {
+        val hash = currentHash
+        val media = current
+        if (hash == null || media == null) {
+            toast(getString(R.string.hashing))
+            return
+        }
+        val existing = Graph.tagStore.tagsFor(hash).map { it.tag }.toSet()
+
+        val content = layoutInflater.inflate(R.layout.dialog_tag_picker, null)
+        val list = content.findViewById<RecyclerView>(R.id.rvTagTree)
+        list.layoutManager = LinearLayoutManager(this)
+        val adapter = TagTreeAdapter(TagCatalog.tree, existing)
+        list.adapter = adapter
+        // 弹窗内滚动：约占屏幕一半高度
+        list.layoutParams = list.layoutParams.apply {
+            height = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.select_tags_title)
+            .setView(content)
+            .setNegativeButton(R.string.auto_tag_cancel, null)
+            .setPositiveButton(R.string.select_tags_add, null)
+            .create()
+
+        dialog.setOnShowListener {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun refreshPositive() {
+                val count = adapter.selectedTags.size
+                positive.isEnabled = count > 0
+                positive.text = getString(R.string.select_tags_add_count, count)
+            }
+            adapter.onSelectionChanged = { refreshPositive() }
+            refreshPositive()
+
+            positive.setOnClickListener {
+                val chosen = adapter.selectedTags
+                val toAdd = TagParser.filterExisting(chosen, existing.toList())
+                if (toAdd.isEmpty()) {
+                    toast(getString(R.string.tags_all_exist))
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                lifecycleScope.launch {
+                    val added = withContext(Dispatchers.IO) {
+                        Graph.tagStore.addTags(hash, toAdd, TagEntry.SOURCE_MANUAL, media)
+                    }
+                    updateChips()
+                    snack(getString(R.string.tag_added, added))
+                }
+            }
+        }
+        dialog.show()
+    }
+
     // ---- 自动添加标签 ----
 
     private fun onAutoTagClicked() {
@@ -448,11 +512,6 @@ class MediaViewerActivity : AppCompatActivity() {
         popup.menuInflater.inflate(R.menu.menu_viewer, popup.menu)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                R.id.action_copy_hash -> {
-                    copyHashToClipboard()
-                    true
-                }
-
                 R.id.action_model_manage -> {
                     startActivity(Intent(this, ModelManageActivity::class.java))
                     true
@@ -529,13 +588,6 @@ class MediaViewerActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
         }
-    }
-
-    private fun copyHashToClipboard() {
-        val hash = currentHash ?: return
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("SHA-256", hash))
-        toast(getString(R.string.hash_copied))
     }
 
     private fun showFileInfoDialog() {

@@ -15,9 +15,7 @@
     <string name="more">更多</string>
     <string name="hashing">正在计算文件哈希…</string>
     <string name="hash_failed">无法读取该文件（可能已被移动、删除或权限变更）</string>
-    <string name="copy_hash">复制哈希</string>
     <string name="file_info">文件信息</string>
-    <string name="hash_copied">已复制 SHA-256 哈希</string>
     <string name="tag_removed">已删除标签「%1$s」</string>
     <string name="undo">撤销</string>
     <string name="tag_added">已添加 %1$d 个标签</string>
@@ -28,8 +26,18 @@
     <string name="voice_failed">语音识别不可用：%1$s</string>
 
     <!-- 底部菜单 -->
+    <string name="select_tags">选择标签</string>
     <string name="btn_manual_tag">手动添加标签</string>
     <string name="btn_auto_tag">自动添加标签</string>
+
+    <!-- 选择标签（树形目录） -->
+    <string name="select_tags_title">选择标签</string>
+    <string name="select_tags_hint">按主题展开，勾选一个或多个标签</string>
+    <string name="select_tags_add">添加</string>
+    <string name="select_tags_add_count">添加（%1$d）</string>
+    <string name="tag_group_count">%1$d 个</string>
+    <string name="tag_marked_added">%1$s（已添加）</string>
+    <string name="tags_all_exist">所选标签都已存在</string>
 
     <!-- 自动打标 -->
     <string name="auto_tag_analyzing">正在分析当前媒体…</string>

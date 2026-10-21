@@ -118,26 +118,63 @@
         android:padding="8dp">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSelectTags"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
+            android:text="@string/select_tags"
+            android:textSize="12sp"
+            app:icon="@drawable/ic_tag_list"
+            app:iconGravity="start"
+            app:iconPadding="2dp"
+            app:iconSize="16dp" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnManualTag"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
             android:layout_weight="1"
+            android:ellipsize="end"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
             android:text="@string/btn_manual_tag"
+            android:textSize="12sp"
             app:icon="@drawable/ic_label"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="2dp"
+            app:iconSize="16dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAutoTag"
             style="@style/Widget.Material3.Button"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
             android:layout_weight="1"
+            android:ellipsize="end"
+            android:insetLeft="0dp"
+            android:insetRight="0dp"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:paddingHorizontal="4dp"
             android:text="@string/btn_auto_tag"
+            android:textSize="12sp"
             app:icon="@drawable/ic_auto_awesome"
-            app:iconGravity="start" />
+            app:iconGravity="start"
+            app:iconPadding="2dp"
+            app:iconSize="16dp" />
     </LinearLayout>
 
     <!-- 进度浮层 -->
