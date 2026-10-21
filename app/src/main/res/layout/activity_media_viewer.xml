@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 顶部不再有菜单栏背景：只保留浮在照片上的「更多」按钮与标签 -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="4dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/btnOverflow"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_more_button"
+                android:contentDescription="@string/more"
+                android:src="@drawable/ic_more_vert"
+                app:tint="@android:color/white" />
+        </LinearLayout>
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroupTags"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:paddingHorizontal="8dp"
+            app:singleLine="false" />
+    </LinearLayout>
+
+    <!-- 手动标签输入面板（默认收起） -->
+    <LinearLayout
+        android:id="@+id/panelManualTag"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="72dp"
+        android:background="?attr/colorSurface"
+        android:elevation="4dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/etTagInput"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="@string/tag_input_hint"
+                android:imeOptions="actionDone"
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine"
+                android:maxLines="3"
+                android:minHeight="44dp"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?android:attr/textColorSecondary" />
+
+            <ImageButton
+                android:id="@+id/btnVoice"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/voice_input"
+                android:src="@drawable/ic_mic"
+                app:tint="?attr/colorOnSurface" />
+
+            <ImageButton
+                android:id="@+id/btnConfirmTag"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_confirm_button"
+                android:contentDescription="@string/confirm_tag"
+                android:padding="10dp"
+                android:src="@drawable/ic_check"
+                app:tint="@android:color/white" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 底部常驻菜单栏 -->
+    <LinearLayout
+        android:id="@+id/bottomMenu"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorSurface"
+        android:elevation="8dp"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnManualTag"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:text="@string/btn_manual_tag"
+            app:icon="@drawable/ic_label"
+            app:iconGravity="start" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAutoTag"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:text="@string/btn_auto_tag"
+            app:icon="@drawable/ic_auto_awesome"
+            app:iconGravity="start" />
+    </LinearLayout>
+
+    <!-- 进度浮层 -->
+    <FrameLayout
+        android:id="@+id/progressOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="?attr/colorSurface"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <ProgressBar
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal" />
+
+            <TextView
+                android:id="@+id/tvProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/auto_tag_analyzing"
+                android:textColor="?attr/colorOnSurface" />
+        </LinearLayout>
+    </FrameLayout>
+
+</FrameLayout>

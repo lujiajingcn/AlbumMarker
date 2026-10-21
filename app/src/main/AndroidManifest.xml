@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Model download / update checks -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Reading photos & videos -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- 位置访问：Android 12 若不持有此权限，MediaProvider 会走「剥离 GPS 的 redaction」
+         缓存路径返回文件；该路径在真机(红米 K30 Pro)实测会抛 IllegalStateException
+         ("Failed to redact ...") 导致查看器崩溃。声明并申请后直接返回原图，绕开该脆弱路径。 -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    <!-- Android 14+ partial photo access ("Selected photos") -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- 把标签写入照片本体（XMP）：Android 10 及以下改写 MediaStore 文件需要它；
+         Android 11+ 走 MediaStore.createWriteRequest() 用户授权，不需要此权限。 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <application
+        android:name=".AlbumMarkerApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AlbumMarker">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Allow opening a photo/video from other apps (file managers, chat apps, ...) -->
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MediaViewerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AlbumMarker.Viewer" />
+
+        <activity
+            android:name=".ModelManageActivity"
+            android:exported="false"
+            android:label="@string/title_model_manage" />
+
+    </application>
+
+</manifest>

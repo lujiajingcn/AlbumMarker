@@ -1,0 +1,28 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures
+.externalNativeBuild
+.cxx
+/app/build/
+*.apk
+*.aab
+build.log
+
+# 诊断/验收产物（日志、截图、临时数据库、UI dump）不入库
+*.log
+/tools/**/logcat*.txt
+/tools/**/*.db
+/tools/**/*.png
+/tools/**/*.jpg
+/tools/**/*.xml
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 标签导出数据（含个人照片信息）
+*.csv

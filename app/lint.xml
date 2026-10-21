@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+      Qwen3.5-0.8B / LiteRT-LM 等模型名中的连字符是专有名词的一部分，
+      不应替换为 en dash；其余排版警告均已在代码/布局中修复。
+    -->
+    <issue id="TypographyDashes" severity="ignore" />
+</lint>

@@ -1,0 +1,34 @@
+﻿0|名称|probe_xmp.jpg
+1|大小|555 KB
+2|项目类型|JPG 图片文件
+3|修改日期|2026/10/14 12:52
+4|创建日期|2026/10/14 12:48
+5|访问日期|2026/10/14 12:52
+6|属性|A
+9|假设的类型|图像
+10|所有者|DESKTOP-DDL0KTQ\lujiajing
+11|种类|图片
+18|标记|中文标签; 旅行; 2026
+19|分级|未分级
+21|标题|中文标签、旅行、2026
+31|分辨率|‪1080 x 2400‬
+57|总大小|736 GB
+61|计算机|DESKTOP-DDL0KTQ (这台电脑)
+164|文件扩展名|.jpg
+165|文件名|probe_xmp.jpg
+175|可用空间|316 GB
+180|位深度|24
+181|水平分辨率|‎96 dpi
+182|宽度|‎1080 像素
+183|垂直分辨率|‎96 dpi
+184|高度|‎2400 像素
+193|已共享|否
+196|文件夹名称|probe
+197|文件位置|E:\study_lujiajing\WorkSpace_AlbumMarker\AlbumMarker\tools\diag\probe
+198|文件夹|probe (E:\study_lujiajing\WorkSpace_AlbumMarker\AlbumMarker\tools\diag)
+201|路径|E:\study_lujiajing\WorkSpace_AlbumMarker\AlbumMarker\tools\diag\probe\probe_xmp.jpg
+203|类型|JPG 图片文件
+209|链接状态|未解析
+261|已用空间|‎56%
+304|共享状态|未共享
+305||可用

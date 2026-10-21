@@ -1,0 +1,95 @@
+<resources>
+    <string name="app_name">相册标签工具</string>
+
+    <!-- 主界面 -->
+    <string name="title_model_manage">模型管理</string>
+    <string name="empty_gallery">未找到照片或视频\n请在系统相册中放入媒体文件后重试</string>
+
+    <!-- 权限 -->
+    <string name="perm_title">需要相册访问权限</string>
+    <string name="perm_message">本应用需要读取照片和视频的权限，才能浏览媒体、计算文件哈希并添加标签。</string>
+    <string name="perm_grant">去授权</string>
+    <string name="perm_denied">未获得权限，无法加载媒体</string>
+
+    <!-- 查看器 -->
+    <string name="more">更多</string>
+    <string name="hashing">正在计算文件哈希…</string>
+    <string name="hash_failed">无法读取该文件（可能已被移动、删除或权限变更）</string>
+    <string name="copy_hash">复制哈希</string>
+    <string name="file_info">文件信息</string>
+    <string name="hash_copied">已复制 SHA-256 哈希</string>
+    <string name="tag_removed">已删除标签「%1$s」</string>
+    <string name="undo">撤销</string>
+    <string name="tag_added">已添加 %1$d 个标签</string>
+    <string name="tag_input_hint">输入标签，多个用逗号分隔</string>
+    <string name="voice_input">语音输入</string>
+    <string name="confirm_tag">确认添加标签</string>
+    <string name="voice_empty">没有识别到语音内容</string>
+    <string name="voice_failed">语音识别不可用：%1$s</string>
+
+    <!-- 底部菜单 -->
+    <string name="btn_manual_tag">手动添加标签</string>
+    <string name="btn_auto_tag">自动添加标签</string>
+
+    <!-- 自动打标 -->
+    <string name="auto_tag_analyzing">正在分析当前媒体…</string>
+    <string name="auto_tag_analyzing_qwen">Qwen 模型分析中（首次加载模型需要几秒）…</string>
+    <string name="auto_tag_no_model_title">尚未安装 Qwen 模型</string>
+    <string name="auto_tag_no_model_msg">自动打标需要安装 Qwen3.5-0.8B 本地模型（.task / .litert 格式）。\n你也可以先用「启发式标签」体验（基于颜色、亮度、EXIF 等本地特征，无需模型）。</string>
+    <string name="auto_tag_install">去安装模型</string>
+    <string name="auto_tag_heuristic">使用启发式标签</string>
+    <string name="auto_tag_cancel">取消</string>
+    <string name="suggest_title">建议标签（可勾选）</string>
+    <string name="suggest_from_qwen">来源：Qwen3.5-0.8B 本地模型</string>
+    <string name="suggest_from_heuristic">来源：启发式分析（未安装模型）</string>
+    <string name="suggest_add_selected">添加所选（%1$d）</string>
+    <string name="suggest_empty">模型没有返回有效标签，请重试或改用启发式标签</string>
+    <string name="auto_tag_failed">自动打标失败：%1$s</string>
+
+    <!-- 模型管理 -->
+    <string name="model_status_title">模型状态</string>
+    <string name="model_status_none">未安装模型</string>
+    <string name="model_status_ready">已就绪：%1$s（%2$s）</string>
+    <string name="model_status_broken">模型异常：%1$s</string>
+    <string name="model_import_file">从文件导入</string>
+    <string name="model_import_hint">通过系统文件选择器导入 .task / .litert 模型文件</string>
+    <string name="model_download">从网址下载</string>
+    <string name="model_url_hint">模型直链（.task / .litert）</string>
+    <string name="model_download_progress">下载中 %1$d%%</string>
+    <string name="model_importing">正在导入模型…</string>
+    <string name="model_delete">删除模型</string>
+    <string name="model_delete_confirm">确定删除已安装的模型文件？删除后自动打标将不可用。</string>
+    <string name="model_deleted">模型已删除</string>
+    <string name="model_imported">模型已安装：%1$s</string>
+    <string name="model_import_failed">导入失败：%1$s</string>
+    <string name="model_download_failed">下载失败：%1$s</string>
+    <string name="model_help_title">关于模型</string>
+    <string name="model_help">自动打标使用 MediaPipe LLM Inference 在设备本地运行 Qwen3.5-0.8B，不会上传任何照片或视频。\n\n安装方式：\n1. 获取 Qwen3.5-0.8B 的 .task（LiteRT-LM）格式模型文件（约 0.5–1 GB，可从 litert-community（HuggingFace）或 ModelScope 下载）；\n2. 在本页「从文件导入」，或填写直链「从网址下载」。\n\n未安装模型时，「自动添加标签」会退化为启发式标签（颜色 / 亮度 / 横竖版 / EXIF / 时长等本地特征）。</string>
+    <string name="confirm">确定</string>
+
+    <!-- 文件信息 -->
+    <string name="info_name">文件名</string>
+    <string name="info_type">类型</string>
+    <string name="info_size">大小</string>
+    <string name="info_modified">修改时间</string>
+    <string name="info_uri">Uri</string>
+    <string name="info_hash">SHA-256</string>
+
+    <!-- 视频播放 -->
+    <string name="play">播放</string>
+    <string name="pause">暂停</string>
+    <string name="time_zero">0:00</string>
+
+    <!-- 标签写入文件本体（XMP） -->
+    <string name="embed_to_file">写入标签到文件</string>
+    <string name="embed_all">写入所有标签到文件</string>
+    <string name="embed_only_jpeg">仅支持 JPEG 照片，视频暂不支持</string>
+    <string name="embed_no_tags">该照片还没有标签，先添加再写入</string>
+    <string name="embed_write_denied">未获得文件修改授权</string>
+    <string name="embed_running">正在写入标签到文件…</string>
+    <string name="embed_done">已写入 %1$d 个标签到文件（XMP）\n拷贝到电脑后，照片属性「标记」可直接查看</string>
+    <string name="embed_failed">写入失败：%1$s</string>
+    <string name="embed_batch_none">没有带标签的 JPEG 照片</string>
+    <string name="embed_batch_progress">正在写入 %1$d / %2$d …</string>
+    <string name="embed_batch_summary">完成：成功 %1$d 张，失败 %2$d 张</string>
+</resources>

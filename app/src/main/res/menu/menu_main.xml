@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <!-- 首页工具栏只保留「更多」，操作项都收进溢出菜单 -->
+    <item
+        android:id="@+id/action_model_manage"
+        android:title="@string/title_model_manage"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_embed_all"
+        android:title="@string/embed_all"
+        app:showAsAction="never" />
+</menu>
