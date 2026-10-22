@@ -41,7 +41,7 @@
 
     <!-- 自动打标 -->
     <string name="auto_tag_analyzing">正在分析当前媒体…</string>
-    <string name="auto_tag_analyzing_qwen">Qwen 模型分析中（首次加载 1.3 GB 模型可能需要 10–60 秒）…</string>
+    <string name="auto_tag_analyzing_qwen">Qwen 模型首次加载中（约 10–60 秒，同一次查看器内后续会复用）…</string>
     <string name="auto_tag_no_model_title">尚未安装 Qwen 模型</string>
     <string name="auto_tag_no_model_msg">自动打标需要安装 Qwen3.5-0.8B 的 LiteRT-LM 视觉模型（.litertlm，推荐 VL 版，约 1.3 GB）。\n你也可以先用「启发式标签」体验（基于颜色、亮度、EXIF 等本地特征，无需模型）。</string>
     <string name="auto_tag_install">去安装模型</string>

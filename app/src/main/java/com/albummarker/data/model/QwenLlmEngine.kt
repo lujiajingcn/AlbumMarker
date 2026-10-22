@@ -31,7 +31,12 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
     override val displayName: String = "Qwen3.5-0.8B-VL（LiteRT-LM）"
 
     private val lock = Any()
+
+    // volatile：isLoaded() 会在主线程被调用，不能去抢 prepare() 加载模型时持有的锁
+    @Volatile
     private var engine: Engine? = null
+
+    @Volatile
     private var loadedPath: String? = null
 
     /** 幂等加载模型；重复调用同路径不会重建。调用方应放在 IO 线程。 */
@@ -53,6 +58,9 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
             loadedPath = modelPath
         }
     }
+
+    /** 指定模型是否已加载；用于区分「首次加载」与「后续复用」的提示文案。 */
+    fun isLoaded(modelPath: String): Boolean = loadedPath == modelPath && engine != null
 
     override suspend fun suggestTags(input: TagInput): List<String> = withContext(Dispatchers.Default) {
         val raw = synchronized(lock) {

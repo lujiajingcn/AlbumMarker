@@ -49,10 +49,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         autoJob?.cancel()
         autoJob = viewModelScope.launch {
             val app = getApplication<Application>()
+            val qwenPath = modelPath?.takeIf { useQwen }
+            val modelAlreadyLoaded = qwenPath != null && qwenEngine?.isLoaded(qwenPath) == true
             _autoTagState.value = AutoTagState.Running(
-                app.getString(if (useQwen) R.string.auto_tag_analyzing_qwen else R.string.auto_tag_analyzing)
+                app.getString(
+                    if (qwenPath != null && !modelAlreadyLoaded) R.string.auto_tag_analyzing_qwen
+                    else R.string.auto_tag_analyzing
+                )
             )
-            Log.d(TAG, "state -> Running")
+            Log.d(TAG, "state -> Running (modelLoaded=$modelAlreadyLoaded)")
             try {
                 val input = withContext(Dispatchers.IO) {
                     Log.d(TAG, "buildInput start")
@@ -61,9 +66,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 if (input.bitmaps.isEmpty()) {
                     throw IllegalStateException("无法从该媒体提取画面帧")
                 }
-                val engine: AutoTagEngine = if (useQwen && modelPath != null) {
+                val engine: AutoTagEngine = if (qwenPath != null) {
                     val qwen = qwenEngine ?: QwenLlmEngine(app).also { qwenEngine = it }
-                    withContext(Dispatchers.IO) { qwen.prepare(modelPath) }
+                    withContext(Dispatchers.IO) { qwen.prepare(qwenPath) }
                     qwen
                 } else {
                     HeuristicTagEngine()
