@@ -4,6 +4,9 @@
     <!-- 主界面 -->
     <string name="title_model_manage">模型管理</string>
     <string name="empty_gallery">未找到照片或视频\n请在系统相册中放入媒体文件后重试</string>
+    <string name="search_tags">搜索标签</string>
+    <string name="search_close">关闭搜索</string>
+    <string name="search_no_result">没有找到带该标签的照片</string>
 
     <!-- 权限 -->
     <string name="perm_title">需要相册访问权限</string>

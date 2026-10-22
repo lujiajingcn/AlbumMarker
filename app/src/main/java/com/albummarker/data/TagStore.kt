@@ -255,6 +255,35 @@ class TagStore(context: Context) :
         )
     }
 
+    /**
+     * 按标签模糊搜索（空格 / 逗号分隔多个关键词，任一命中即返回），
+     * 返回匹配媒体在 media_tags 中记录的 Uri 字符串集合。
+     */
+    fun searchMediaUris(query: String): Set<String> {
+        val tokens = query.trim()
+            .split(' ', '\t', '\n', ',', '，', '、')
+            .filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return emptySet()
+
+        val result = mutableSetOf<String>()
+        val db = readableDatabase
+        for (token in tokens) {
+            val escaped = token
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            db.rawQuery(
+                "SELECT DISTINCT m.uri FROM $TABLE_TAGS t " +
+                    "JOIN $TABLE_MEDIA m ON m.hash = t.hash " +
+                    "WHERE t.tag LIKE ? ESCAPE '\\'",
+                arrayOf("%$escaped%"),
+            ).use { c ->
+                while (c.moveToNext()) result += c.getString(0)
+            }
+        }
+        return result
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """

@@ -7,15 +7,21 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.PopupMenu
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.recyclerview.widget.GridLayoutManager
+import com.albummarker.data.MediaItem
 import com.albummarker.data.MediaQuery
 import com.albummarker.data.TagEmbedder
 import com.albummarker.data.TaggedMedia
@@ -23,6 +29,8 @@ import com.albummarker.databinding.ActivityMainBinding
 import com.albummarker.ui.MediaGridAdapter
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.lifecycleScope
@@ -35,6 +43,18 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MediaGridAdapter
+
+    /** 相册全量媒体；搜索时从这里过滤。 */
+    private var allItems: List<MediaItem> = emptyList()
+    private var searchQuery: String = ""
+    private var searchJob: Job? = null
+
+    /** 搜索框展开时，系统返回键先收起搜索，而不是退出应用。 */
+    private val searchBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            closeSearch()
+        }
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -87,6 +107,17 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.btnMore.setOnClickListener { showOverflowMenu(it) }
+        binding.btnSearch.setOnClickListener { openSearch() }
+        binding.btnCloseSearch.setOnClickListener { closeSearch() }
+        binding.etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                searchQuery = s?.toString().orEmpty()
+                scheduleFilter()
+            }
+        })
+        onBackPressedDispatcher.addCallback(this, searchBackCallback)
 
         adapter = MediaGridAdapter { item, position ->
             startActivity(
@@ -103,6 +134,14 @@ class MainActivity : AppCompatActivity() {
             loadMedia()
         } else {
             permissionLauncher.launch(requiredPermissions())
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 从查看器/模型管理返回时标签可能已变化，重新应用当前搜索条件
+        if (::adapter.isInitialized && allItems.isNotEmpty()) {
+            refreshFilter()
         }
     }
 
@@ -125,11 +164,92 @@ class MainActivity : AppCompatActivity() {
         binding.tvEmpty.isVisible = false
         lifecycleScope.launch {
             val items = withContext(Dispatchers.IO) { MediaQuery.load(this@MainActivity) }
+            allItems = items
             binding.pbLoading.isVisible = false
-            MediaBus.current = items
-            adapter.submitList(items)
-            binding.tvEmpty.isVisible = items.isEmpty()
-            if (items.isNotEmpty()) binding.tvEmpty.setText(R.string.empty_gallery)
+            applyFilterNow(searchQuery)
+        }
+    }
+
+    // ---- 首页标签搜索 ----
+
+    private fun openSearch() {
+        binding.searchBar.isVisible = true
+        binding.btnSearch.isVisible = false
+        binding.btnMore.isVisible = false
+        searchBackCallback.isEnabled = true
+        setGridBelowSearch(true)
+        binding.etSearch.requestFocus()
+        binding.etSearch.post {
+            (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(binding.etSearch, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun closeSearch() {
+        binding.etSearch.setText("")
+        searchJob?.cancel()
+        searchQuery = ""
+        binding.etSearch.clearFocus()
+        binding.searchBar.isVisible = false
+        binding.btnSearch.isVisible = true
+        binding.btnMore.isVisible = true
+        searchBackCallback.isEnabled = false
+        setGridBelowSearch(false)
+        (getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(binding.etSearch.windowToken, 0)
+        searchJob = lifecycleScope.launch { applyFilterNow("") }
+    }
+
+    /** 搜索展开时把网格顶边约束到搜索框下方，避免第一排照片被搜索框盖住。 */
+    private fun setGridBelowSearch(active: Boolean) {
+        val set = ConstraintSet()
+        set.clone(binding.root)
+        if (active) {
+            set.connect(R.id.rvMedia, ConstraintSet.TOP, R.id.searchBar, ConstraintSet.BOTTOM)
+            set.setMargin(R.id.rvMedia, ConstraintSet.TOP, dp(8))
+        } else {
+            set.connect(R.id.rvMedia, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            set.setMargin(R.id.rvMedia, ConstraintSet.TOP, 0)
+        }
+        set.applyTo(binding.root)
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    /** 输入防抖 250ms，避免每个字符都查一次库。 */
+    private fun scheduleFilter() {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch {
+            delay(250)
+            applyFilterNow(searchQuery)
+        }
+    }
+
+    private fun refreshFilter() {
+        searchJob?.cancel()
+        searchJob = lifecycleScope.launch { applyFilterNow(searchQuery) }
+    }
+
+    private suspend fun applyFilterNow(query: String) {
+        val filtered = if (query.isBlank()) {
+            allItems
+        } else {
+            val uris = withContext(Dispatchers.IO) {
+                Graph.tagStore.searchMediaUris(query)
+            }
+            allItems.filter { it.uri.toString() in uris }
+        }
+        MediaBus.current = filtered
+        adapter.submitList(filtered) {
+            if (query.isNotBlank()) binding.rvMedia.scrollToPosition(0)
+        }
+        if (filtered.isEmpty()) {
+            binding.tvEmpty.isVisible = true
+            binding.tvEmpty.setText(
+                if (query.isBlank()) R.string.empty_gallery else R.string.search_no_result
+            )
+        } else {
+            binding.tvEmpty.isVisible = false
         }
     }
 
