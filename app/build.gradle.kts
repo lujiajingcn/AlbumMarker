@@ -36,10 +36,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         viewBinding = true
     }
@@ -48,6 +44,12 @@ android {
         jniLibs {
             useLegacyPackaging = false
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -66,9 +68,8 @@ dependencies {
     implementation("io.coil-kt:coil:2.5.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // On-device Qwen inference (LlmInference + LlmInferenceSession.addImage)
-    implementation("com.google.mediapipe:tasks-genai:0.10.35")
-    implementation("com.google.mediapipe:tasks-core:0.10.35")
+    // On-device Qwen inference via LiteRT-LM (.litertlm bundles)
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.1")
 
     testImplementation("junit:junit:4.13.2")
 }

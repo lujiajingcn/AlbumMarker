@@ -13,7 +13,7 @@ data class TagInput(
 
 /**
  * 需求 6：自动打标引擎抽象。
- * 实现类：QwenLlmEngine（MediaPipe 本地 Qwen 模型）、HeuristicTagEngine（无模型兜底）。
+ * 实现类：QwenLlmEngine（LiteRT-LM 本地 Qwen 模型）、HeuristicTagEngine（无模型兜底）。
  */
 interface AutoTagEngine {
     val id: String

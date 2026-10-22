@@ -18,6 +18,7 @@ import java.net.URL
 /**
  * 需求 6：Qwen3.5-0.8B 本地模型的安装与管理。
  *
+ * - 模型为 LiteRT-LM 的 `.litertlm` 包（推荐 VL 视觉版，约 1.3 GB）；
  * - 模型保存于应用私有目录 files/models/（无需额外存储权限）；
  * - 支持两条安装路径：SAF 文件导入、URL 直链下载（.part 落盘后原子改名）；
  * - 状态通过 StateFlow 暴露：未安装 / 已就绪 / 异常。
@@ -30,8 +31,8 @@ class ModelManager(private val context: Context) {
         private const val KEY_PATH = "active_model_path"
         private const val KEY_NAME = "active_model_name"
 
-        /** MediaPipe LLM Inference 可加载的模型后缀。 */
-        val SUPPORTED_EXTENSIONS = listOf(".task", ".litert", ".tflite", ".bin")
+        /** LiteRT-LM 可加载的模型后缀。 */
+        val SUPPORTED_EXTENSIONS = listOf(".litertlm")
 
         private const val CONNECT_TIMEOUT_MS = 15_000
         private const val READ_TIMEOUT_MS = 30_000
@@ -51,11 +52,11 @@ class ModelManager(private val context: Context) {
     private val _state = MutableStateFlow<ModelState>(ModelState.NotInstalled)
     val state: StateFlow<ModelState> = _state.asStateFlow()
 
-    /** 当前激活的模型文件；未安装返回 null。 */
+    /** 当前激活的模型文件；未安装或仍是旧格式时返回 null。 */
     val activeModelPath: String?
         get() = prefs.getString(KEY_PATH, null)?.takeIf { path ->
-            val f = File(path)
-            f.isFile && f.length() > 0 && f.canRead()
+            path.endsWith(".litertlm", ignoreCase = true) &&
+                File(path).let { it.isFile && it.length() > 0 && it.canRead() }
         }
 
     fun refresh() {
@@ -66,6 +67,8 @@ class ModelManager(private val context: Context) {
         }
         val file = File(path)
         _state.value = when {
+            !path.endsWith(".litertlm", ignoreCase = true) ->
+                ModelState.Broken("旧版模型格式已不再支持，请重新安装 .litertlm")
             !file.exists() -> ModelState.Broken("模型文件不存在: ${file.name}")
             file.length() <= 0 -> ModelState.Broken("模型文件为空: ${file.name}")
             !file.canRead() -> ModelState.Broken("模型文件不可读: ${file.name}")

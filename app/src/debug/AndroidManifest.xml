@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 仅 debug 构建允许明文 HTTP，便于通过 `adb reverse` + 本地 HTTP 服务测试模型下载；
+         release 构建不受影响（仍禁止 cleartext）。 -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

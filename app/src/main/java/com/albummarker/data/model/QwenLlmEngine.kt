@@ -2,98 +2,143 @@ package com.albummarker.data.model
 
 import android.content.Context
 import android.graphics.Bitmap
-import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
+import android.util.Log
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Content
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
- * 需求 6：基于 MediaPipe LLM Inference 的本地 Qwen 引擎。
+ * 需求 6：基于 LiteRT-LM 的本地 Qwen 引擎，加载 `.litertlm` 模型包。
  *
- * - 模型文件（.task / .litert）由 ModelManager 管理，路径在 prepare() 时传入；
- * - 图像经 LlmInferenceSession.addImage(MPImage) 送入（已验证 0.10.35 支持）；
- * - 模型为纯文本时自动降级为纯文本提示（图像信息丢失但不崩溃）；
- * - 输出按分隔符切分为标签。
- *
- * LlmInference 实例复用（模型加载数秒，不能每次请求都重建）。
+ * 与旧 MediaPipe 实现的区别：
+ * - 模型必须是 **VL（视觉）版** `Qwen3.5-0.8B-VL_int8.litertlm`，纯文本版看不到照片，
+ *   无法用于打标；
+ * - 图像以 JPEG 字节（`Content.ImageBytes`）随消息送入，模型侧按 512×512 预处理；
+ * - 每次打标创建并关闭一个 Conversation，Engine 复用（首次 initialize 可能 10–60 秒）。
  */
 class QwenLlmEngine(private val context: Context) : AutoTagEngine {
 
     override val id: String = AutoTagEngine.ID_QWEN
-    override val displayName: String = "Qwen3.5-0.8B（本地模型）"
+    override val displayName: String = "Qwen3.5-0.8B-VL（LiteRT-LM）"
 
     private val lock = Any()
-    private var llm: LlmInference? = null
+    private var engine: Engine? = null
     private var loadedPath: String? = null
 
-    /** 幂等加载模型；重复调用同路径不会重建。 */
+    /** 幂等加载模型；重复调用同路径不会重建。调用方应放在 IO 线程。 */
     fun prepare(modelPath: String) {
         synchronized(lock) {
-            if (loadedPath == modelPath && llm != null) return
+            if (loadedPath == modelPath && engine != null) return
             release()
-            val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(modelPath)
-                .setMaxTokens(MAX_TOKENS)
-                .setMaxNumImages(MAX_IMAGES)
-                .build()
-            llm = LlmInference.createFromOptions(context, options)
+            val config = EngineConfig(
+                modelPath = modelPath,
+                backend = Backend.CPU(),
+                visionBackend = Backend.CPU(),
+                maxNumTokens = MAX_CONTEXT_TOKENS,
+                maxNumImages = 1,
+                cacheDir = context.cacheDir.path,
+            )
+            val loaded = Engine(config)
+            loaded.initialize()
+            engine = loaded
             loadedPath = modelPath
         }
     }
 
-    override suspend fun suggestTags(input: TagInput): List<String> =
-        withContext(Dispatchers.Default) {
-            val engine = synchronized(lock) { llm }
-                ?: throw IllegalStateException("Qwen 模型未加载")
-            val images = input.bitmaps.take(MAX_IMAGES)
-            val raw = runCatching {
-                generate(engine, images, PROMPT)
-            }.getOrElse { firstError ->
-                // 纯文本模型不接受图像输入：去掉图像重试一次
-                if (images.isNotEmpty()) {
-                    runCatching { generate(engine, emptyList(), PROMPT) }
-                        .getOrElse { throw firstError }
-                } else {
-                    throw firstError
-                }
-            }
-            parseTags(raw)
+    override suspend fun suggestTags(input: TagInput): List<String> = withContext(Dispatchers.Default) {
+        val raw = synchronized(lock) {
+            val active = engine ?: throw IllegalStateException("Qwen 模型未加载")
+            generate(active, input)
         }
+        parseTags(raw)
+    }
 
-    private fun generate(engine: LlmInference, images: List<Bitmap>, prompt: String): String {
-        val session = LlmInferenceSession.createFromOptions(
-            engine,
-            LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                .setTemperature(TEMPERATURE)
-                .setTopK(TOP_K)
-                .setTopP(TOP_P)
-                .build()
+    private fun generate(engine: Engine, input: TagInput): String {
+        val image = input.bitmaps.firstOrNull()
+        if (image == null) {
+            throw IllegalStateException("没有可用的画面帧，无法进行图像打标")
+        }
+        val contents = Contents.of(
+            Content.ImageBytes(bitmapToJpeg(image)),
+            Content.Text(PROMPT),
         )
-        try {
-            images.forEach { session.addImage(BitmapImageBuilder(it).build()) }
-            session.addQueryChunk(prompt)
-            return session.generateResponse()
+        val config = ConversationConfig(
+            samplerConfig = SamplerConfig(
+                topK = TOP_K,
+                topP = TOP_P,
+                temperature = TEMPERATURE,
+                seed = 0,
+            ),
+            maxOutputToken = MAX_OUTPUT_TOKENS,
+            // Qwen3.5 的模板默认会带一个空思考块；这里直接关闭思考，减少输出噪声。
+            thinkingConfig = com.google.ai.edge.litertlm.ThinkingConfig(false, 0),
+        )
+        return try {
+            engine.createConversation(config).use { conversation ->
+                conversation.sendMessage(contents).toString()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "LiteRT-LM inference failed", e)
+            throw IllegalStateException(
+                "Qwen 模型推理失败（请确认安装的是 VL 视觉版 .litertlm）：" +
+                    (e.message ?: e.javaClass.simpleName),
+                e,
+            )
+        }
+    }
+
+    /** 缩到最长边 512 并压成 JPEG：Qwen3.5-VL 的视觉输入为 512×512，太大只会浪费内存。 */
+    private fun bitmapToJpeg(bitmap: Bitmap): ByteArray {
+        val longest = max(bitmap.width, bitmap.height)
+        val scaled = if (longest <= IMAGE_MAX_SIDE) {
+            bitmap
+        } else {
+            val scale = IMAGE_MAX_SIDE.toFloat() / longest
+            val w = (bitmap.width * scale).roundToInt().coerceAtLeast(1)
+            val h = (bitmap.height * scale).roundToInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bitmap, w, h, true)
+        }
+        return try {
+            ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+                out.toByteArray()
+            }
         } finally {
-            runCatching { session.close() }
+            if (scaled !== bitmap) scaled.recycle()
         }
     }
 
     override fun release() {
         synchronized(lock) {
-            runCatching { llm?.close() }
-            llm = null
+            runCatching { engine?.close() }
+            engine = null
             loadedPath = null
         }
     }
 
     companion object {
-        /** 单次推理最多送入的图像数（视频抽帧上限）。 */
-        const val MAX_IMAGES = 3
-        private const val MAX_TOKENS = 384
-        private const val TEMPERATURE = 0.2f
+        private const val TAG = "QwenLlmEngine"
+
+        /** 视觉输入最长边。 */
+        private const val IMAGE_MAX_SIDE = 512
+        private const val JPEG_QUALITY = 90
+
+        /** 上下文与输出上限。 */
+        private const val MAX_CONTEXT_TOKENS = 2048
+        private const val MAX_OUTPUT_TOKENS = 192
+
+        private const val TEMPERATURE = 0.2
         private const val TOP_K = 4
-        private const val TOP_P = 0.9f
+        private const val TOP_P = 0.9
 
         /** 面向 Qwen 系列的中文打标提示词。 */
         const val PROMPT =
@@ -117,9 +162,7 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
                 var tag = piece.trim()
                     .trim('"', '\'', '“', '”', '‘', '’', '*', '#')
                     .removePrefix("-").removePrefix("•").trim()
-                // 去掉行首编号，如 "1. 海边"
                 tag = tag.replaceFirst(NUMBERING_PREFIX, "")
-                // 纯数字片段是编号残留，不是标签
                 if (tag.isEmpty() || tag.all { it.isDigit() }) continue
                 if (tag.length > MAX_TAG_LEN) tag = tag.take(MAX_TAG_LEN)
                 result.add(tag)

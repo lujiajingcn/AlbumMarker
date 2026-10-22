@@ -41,14 +41,14 @@
 
     <!-- 自动打标 -->
     <string name="auto_tag_analyzing">正在分析当前媒体…</string>
-    <string name="auto_tag_analyzing_qwen">Qwen 模型分析中（首次加载模型需要几秒）…</string>
+    <string name="auto_tag_analyzing_qwen">Qwen 模型分析中（首次加载 1.3 GB 模型可能需要 10–60 秒）…</string>
     <string name="auto_tag_no_model_title">尚未安装 Qwen 模型</string>
-    <string name="auto_tag_no_model_msg">自动打标需要安装 Qwen3.5-0.8B 本地模型（.task / .litert 格式）。\n你也可以先用「启发式标签」体验（基于颜色、亮度、EXIF 等本地特征，无需模型）。</string>
+    <string name="auto_tag_no_model_msg">自动打标需要安装 Qwen3.5-0.8B 的 LiteRT-LM 视觉模型（.litertlm，推荐 VL 版，约 1.3 GB）。\n你也可以先用「启发式标签」体验（基于颜色、亮度、EXIF 等本地特征，无需模型）。</string>
     <string name="auto_tag_install">去安装模型</string>
     <string name="auto_tag_heuristic">使用启发式标签</string>
     <string name="auto_tag_cancel">取消</string>
     <string name="suggest_title">建议标签（可勾选）</string>
-    <string name="suggest_from_qwen">来源：Qwen3.5-0.8B 本地模型</string>
+    <string name="suggest_from_qwen">来源：Qwen3.5-0.8B-VL（LiteRT-LM 本地模型）</string>
     <string name="suggest_from_heuristic">来源：启发式分析（未安装模型）</string>
     <string name="suggest_add_selected">添加所选（%1$d）</string>
     <string name="suggest_empty">模型没有返回有效标签，请重试或改用启发式标签</string>
@@ -60,9 +60,9 @@
     <string name="model_status_ready">已就绪：%1$s（%2$s）</string>
     <string name="model_status_broken">模型异常：%1$s</string>
     <string name="model_import_file">从文件导入</string>
-    <string name="model_import_hint">通过系统文件选择器导入 .task / .litert 模型文件</string>
+    <string name="model_import_hint">通过系统文件选择器导入 .litertlm 模型文件</string>
     <string name="model_download">从网址下载</string>
-    <string name="model_url_hint">模型直链（.task / .litert）</string>
+    <string name="model_url_hint">模型直链（.litertlm）</string>
     <string name="model_download_progress">下载中 %1$d%%</string>
     <string name="model_importing">正在导入模型…</string>
     <string name="model_delete">删除模型</string>
@@ -72,7 +72,7 @@
     <string name="model_import_failed">导入失败：%1$s</string>
     <string name="model_download_failed">下载失败：%1$s</string>
     <string name="model_help_title">关于模型</string>
-    <string name="model_help">自动打标使用 MediaPipe LLM Inference 在设备本地运行 Qwen3.5-0.8B，不会上传任何照片或视频。\n\n安装方式：\n1. 获取 Qwen3.5-0.8B 的 .task（LiteRT-LM）格式模型文件（约 0.5–1 GB，可从 litert-community（HuggingFace）或 ModelScope 下载）；\n2. 在本页「从文件导入」，或填写直链「从网址下载」。\n\n未安装模型时，「自动添加标签」会退化为启发式标签（颜色 / 亮度 / 横竖版 / EXIF / 时长等本地特征）。</string>
+    <string name="model_help">自动打标使用 LiteRT-LM 在设备本地运行 Qwen3.5-0.8B-VL，不会上传任何照片或视频。\n\n推荐模型：Qwen3.5-0.8B-VL_int8.litertlm（约 1.3 GB，带视觉编码器，能看图打标；纯文本版 Qwen3.5-0.8B_int8.litertlm 看不到照片，不要用）。\n下载：https://huggingface.co/litert-community/Qwen3.5-0.8B\n国内镜像：https://hf-mirror.com/litert-community/Qwen3.5-0.8B\n\n安装方式：\n1. 下载 .litertlm 文件（或复制直链）；\n2. 在本页「从文件导入」，或填写直链「从网址下载」。\n\n模型保存在应用私有目录，卸载应用即删除。未安装模型时，「自动添加标签」会退化为启发式标签（颜色 / 亮度 / 横竖版 / EXIF / 时长等本地特征）。</string>
     <string name="confirm">确定</string>
 
     <!-- 文件信息 -->

@@ -184,7 +184,7 @@ class TagStore(context: Context) :
             db.execSQL("UPDATE OR REPLACE $TABLE_MEDIA SET hash=? WHERE hash=?", arrayOf(newHash, oldHash))
             db.execSQL("UPDATE OR REPLACE $TABLE_HASH_CACHE SET hash=? WHERE hash=?", arrayOf(newHash, oldHash))
             if (newSize != null) {
-                db.execSQL("UPDATE $TABLE_MEDIA SET size=? WHERE hash=?", arrayOf(newSize, newHash))
+                db.execSQL("UPDATE $TABLE_MEDIA SET size=? WHERE hash=?", arrayOf<Any?>(newSize, newHash))
             }
             db.setTransactionSuccessful()
         } finally {

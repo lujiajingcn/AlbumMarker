@@ -480,6 +480,7 @@ class MediaViewerActivity : AppCompatActivity() {
                     refreshButtonText()
                 }
             }
+            refreshButtonText()
         }
         dialog.setOnDismissListener { viewModel.resetAutoTag() }
         dialog.show()
