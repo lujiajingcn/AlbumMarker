@@ -12,23 +12,35 @@ import android.text.TextWatcher
 import android.util.Log
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.PopupMenu
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.albummarker.data.BatchTagger
 import com.albummarker.data.MediaGridItem
 import com.albummarker.data.MediaItem
 import com.albummarker.data.MediaQuery
+import com.albummarker.data.TagCatalog
 import com.albummarker.data.TagEmbedder
 import com.albummarker.data.TagEntry
+import com.albummarker.data.TagParser
 import com.albummarker.data.TaggedMedia
+import com.albummarker.data.model.AutoTagEngine
+import com.albummarker.data.model.BatchAutoTagger
+import com.albummarker.data.model.HeuristicTagEngine
+import com.albummarker.data.model.QwenLlmEngine
 import com.albummarker.databinding.ActivityMainBinding
 import com.albummarker.ui.MediaGridAdapter
+import com.albummarker.ui.TagTreeAdapter
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,10 +74,26 @@ class MainActivity : AppCompatActivity() {
     /** Uri 字符串 -> 标签列表；仅在 showTags 为 true 时有意义。 */
     private var tagsByUri: Map<String, List<TagEntry>> = emptyMap()
 
+    /** 当前筛选后的媒体（网格与批量操作的对象）。 */
+    private var visibleItems: List<MediaItem> = emptyList()
+
+    /** 多选模式下已选中的媒体；为空表示不在多选模式。 */
+    private var selectedItems: List<MediaItem> = emptyList()
+
+    /** 多选模式下，单击是切换选中而非打开查看器。 */
+    private var selectionMode: Boolean = false
+
     /** 搜索框展开时，系统返回键先收起搜索，而不是退出应用。 */
     private val searchBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             closeSearch()
+        }
+    }
+
+    /** 多选模式下，返回键先退出多选。 */
+    private val selectionBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            exitSelectionMode()
         }
     }
 
@@ -134,15 +162,27 @@ class MainActivity : AppCompatActivity() {
             }
         })
         onBackPressedDispatcher.addCallback(this, searchBackCallback)
+        onBackPressedDispatcher.addCallback(this, selectionBackCallback)
 
-        adapter = MediaGridAdapter { item, position ->
-            startActivity(
-                Intent(this, MediaViewerActivity::class.java)
-                    .putExtra(MediaViewerActivity.EXTRA_INDEX, position)
-            )
-        }
+        adapter = MediaGridAdapter(
+            onClick = { item, position ->
+                // 多选模式下单击是切换选中；普通模式打开查看器
+                if (selectionMode) toggleSelection(item) else openViewer(position)
+            },
+            onLongClick = { item, _ ->
+                // 长按进入多选并选中该项
+                if (!selectionMode) enterSelectionMode(item) else toggleSelection(item)
+            },
+        )
         binding.rvMedia.layoutManager = GridLayoutManager(this, 3)
         binding.rvMedia.adapter = adapter
+
+        // 首页底部菜单栏：三个按钮对「选中的照片/视频」批量操作
+        binding.btnSelectTags.setOnClickListener { onBatchSelectTags() }
+        binding.btnManualTag.setOnClickListener { onBatchManualTag() }
+        binding.btnAutoTag.setOnClickListener { onBatchAutoTag() }
+        binding.btnSelectAll.setOnClickListener { selectAll() }
+        binding.btnClearSelection.setOnClickListener { exitSelectionMode() }
 
         if (handleViewIntent(intent)) return
 
@@ -272,10 +312,22 @@ class MainActivity : AppCompatActivity() {
             }
             allItems.filter { it.uri.toString() in uris }
         }
+        visibleItems = filtered
         MediaBus.current = filtered
-        adapter.submitList(filtered.map { MediaGridItem(it, tagsFor(it)) }) {
-            if (query.isNotBlank()) binding.rvMedia.scrollToPosition(0)
+        // 筛选变化后，原先选中的媒体可能已不在可见列表里。
+        // 剔除这些「看不见的选中项」，否则批量操作会作用到用户看不到的东西。
+        if (selectionMode) {
+            val visibleUris = filtered.mapTo(mutableSetOf()) { it.uri.toString() }
+            selectedItems = selectedItems.filter { it.uri.toString() in visibleUris }
+            if (selectedItems.isEmpty()) {
+                // 选中的都没了 -> 退出多选模式（网格在下面统一提交一次）
+                clearSelectionState()
+            } else {
+                binding.tvSelectionCount.text =
+                    getString(R.string.selection_count, selectedItems.size)
+            }
         }
+        submitGrid()
         if (filtered.isEmpty()) {
             binding.tvEmpty.isVisible = true
             binding.tvEmpty.setText(
@@ -286,10 +338,273 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 把当前可见媒体提交给适配器（带上标签浮层与多选选中态）。 */
+    private fun submitGrid() {
+        val selected = selectedItems.mapTo(mutableSetOf()) { it.uri.toString() }
+        adapter.submitList(
+            visibleItems.map { MediaGridItem(it, tagsFor(it), it.uri.toString() in selected) }
+        ) {
+            if (searchQuery.isNotBlank()) binding.rvMedia.scrollToPosition(0)
+        }
+    }
+
     /** 取某个媒体的标签（隐藏状态下恒为空）。 */
     private fun tagsFor(item: MediaItem): List<TagEntry> {
         if (!showTags) return emptyList()
         return tagsByUri[item.uri.toString()].orEmpty()
+    }
+
+    // ---- 首页多选 ----
+
+    /** 进入多选模式并选中该项。 */
+    private fun enterSelectionMode(item: MediaItem) {
+        selectionMode = true
+        selectionBackCallback.isEnabled = true
+        binding.selectionBar.isVisible = true
+        selectedItems = listOf(item)
+        updateSelectionUi()
+    }
+
+    /** 退出多选模式，清空选中。 */
+    private fun exitSelectionMode() {
+        clearSelectionState()
+        submitGrid()
+    }
+
+    /** 只清多选状态，不刷新网格（由调用方决定何时刷新，避免重复提交）。 */
+    private fun clearSelectionState() {
+        selectionMode = false
+        selectionBackCallback.isEnabled = false
+        binding.selectionBar.isVisible = false
+        selectedItems = emptyList()
+    }
+
+    /** 切换某项的选中状态。 */
+    private fun toggleSelection(item: MediaItem) {
+        val uri = item.uri.toString()
+        selectedItems = if (selectedItems.any { it.uri.toString() == uri }) {
+            selectedItems.filterNot { it.uri.toString() == uri }
+        } else {
+            selectedItems + item
+        }
+        // 取消到 0 项时自动退出多选，避免底部栏停在空状态
+        if (selectedItems.isEmpty()) {
+            exitSelectionMode()
+            return
+        }
+        updateSelectionUi()
+    }
+
+    /** 全选当前可见的媒体。 */
+    private fun selectAll() {
+        selectedItems = visibleItems
+        updateSelectionUi()
+    }
+
+    /** 刷新「已选 N 项」文案与网格选中态。 */
+    private fun updateSelectionUi() {
+        binding.tvSelectionCount.text =
+            getString(R.string.selection_count, selectedItems.size)
+        submitGrid()
+    }
+
+    /** 打开查看器（普通模式单击）。 */
+    private fun openViewer(position: Int) {
+        startActivity(
+            Intent(this, MediaViewerActivity::class.java)
+                .putExtra(MediaViewerActivity.EXTRA_INDEX, position)
+        )
+    }
+
+    // ---- 批量操作（作用于选中的照片/视频）----
+
+    /** 取出选中项；未处于多选模式时给出提示并返回 null。 */
+    private fun selectedOrHint(): List<MediaItem>? {
+        if (!selectionMode || selectedItems.isEmpty()) {
+            toast(getString(R.string.select_first_hint))
+            return null
+        }
+        return selectedItems
+    }
+
+    /** 批量「选择标签」：从标签目录树里挑标签，添加到所有选中项。 */
+    private fun onBatchSelectTags() {
+        val targets = selectedOrHint() ?: return
+        lifecycleScope.launch {
+            // 先算哈希、取出各选中项的现有标签（耗时在 IO 线程）
+            val prepared = BatchTagger.prepare(this@MainActivity, Graph.tagStore, targets)
+            // 已是所有选中项都有的标签 -> 在树里标为「已添加」不可勾选
+            val existing = prepared.commonTags()
+            showBatchTagPicker(existing) { chosen ->
+                applyBatchTags(targets, chosen)
+            }
+        }
+    }
+
+    /** 展示标签目录树（复用查看器的 [TagTreeAdapter]）。 */
+    private fun showBatchTagPicker(existing: Set<String>, onConfirm: (List<String>) -> Unit) {
+        val content = layoutInflater.inflate(R.layout.dialog_tag_picker, null)
+        val list = content.findViewById<RecyclerView>(R.id.rvTagTree)
+        list.layoutManager = LinearLayoutManager(this)
+        val treeAdapter = TagTreeAdapter(TagCatalog.tree, existing)
+        list.adapter = treeAdapter
+        list.layoutParams = list.layoutParams.apply {
+            height = (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.select_tags_title)
+            .setView(content)
+            .setNegativeButton(R.string.auto_tag_cancel, null)
+            .setPositiveButton(R.string.select_tags_add, null)
+            .create()
+
+        dialog.setOnShowListener {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun refreshPositive() {
+                val count = treeAdapter.selectedTags.size
+                positive.isEnabled = count > 0
+                positive.text = getString(R.string.select_tags_add_count, count)
+            }
+            treeAdapter.onSelectionChanged = { refreshPositive() }
+            refreshPositive()
+
+            positive.setOnClickListener {
+                val chosen = treeAdapter.selectedTags
+                if (chosen.isEmpty()) return@setOnClickListener
+                dialog.dismiss()
+                onConfirm(chosen)
+            }
+        }
+        dialog.show()
+    }
+
+    /** 真正写入：给所有选中项添加标签，带进度提示。 */
+    private fun applyBatchTags(targets: List<MediaItem>, tags: List<String>) {
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setMessage(getString(R.string.batch_auto_progress, 0, targets.size))
+            .setCancelable(false)
+            .show()
+        lifecycleScope.launch {
+            val result = BatchTagger.addTags(
+                context = this@MainActivity,
+                store = Graph.tagStore,
+                media = targets,
+                tags = tags,
+            ) { done, total ->
+                dialog.setMessage(getString(R.string.batch_auto_progress, done, total))
+            }
+            dialog.dismiss()
+            afterBatchDone(result.added, result.failed)
+        }
+    }
+
+    /** 批量「手动添加标签」：输入文本，逗号分隔，添加到所有选中项。 */
+    private fun onBatchManualTag() {
+        val targets = selectedOrHint() ?: return
+        val content = layoutInflater.inflate(R.layout.dialog_batch_tag_input, null)
+        val input = content.findViewById<EditText>(R.id.etBatchTagInput)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.btn_manual_tag)
+            .setView(content)
+            .setNegativeButton(R.string.auto_tag_cancel, null)
+            .setPositiveButton(R.string.batch_tag_confirm, null)
+            .create()
+        dialog.setOnShowListener {
+            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            positive.setOnClickListener {
+                val parsed = TagParser.parse(input.text?.toString().orEmpty())
+                if (parsed.isEmpty()) {
+                    toast(getString(R.string.tag_input_hint))
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                applyBatchTags(targets, parsed)
+            }
+        }
+        dialog.show()
+    }
+
+    /** 批量「自动添加标签」：逐张跑引擎，标签直接写入（不弹建议框）。 */
+    private fun onBatchAutoTag() {
+        val targets = selectedOrHint() ?: return
+        val modelPath = Graph.modelManager.activeModelPath
+        if (modelPath == null) {
+            // 没装模型：直接用启发式引擎，无需确认
+            runBatchAutoTag(targets, useQwen = false, modelPath = null)
+            return
+        }
+        // 装了 Qwen：逐张推理很慢，先让用户确认
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.btn_auto_tag)
+            .setMessage(getString(R.string.batch_auto_confirm, targets.size))
+            .setNegativeButton(R.string.auto_tag_cancel, null)
+            .setPositiveButton(R.string.confirm) { _, _ ->
+                runBatchAutoTag(targets, useQwen = true, modelPath = modelPath)
+            }
+            .show()
+    }
+
+    private fun runBatchAutoTag(
+        targets: List<MediaItem>,
+        useQwen: Boolean,
+        modelPath: String?,
+    ) {
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setMessage(getString(R.string.batch_auto_progress, 0, targets.size))
+            .setCancelable(false)
+            .show()
+        lifecycleScope.launch {
+            var ok = 0
+            var fail = 0
+            var added = 0
+            var engine: AutoTagEngine? = null
+            try {
+                // 引擎在整个批次内复用：Qwen 加载模型很贵，不能每张都重来
+                engine = if (useQwen && modelPath != null) {
+                    val qwen = QwenLlmEngine(this@MainActivity)
+                    withContext(Dispatchers.IO) { qwen.prepare(modelPath) }
+                    qwen
+                } else {
+                    HeuristicTagEngine()
+                }
+                val result = BatchAutoTagger.tagAll(
+                    context = this@MainActivity,
+                    store = Graph.tagStore,
+                    engine = engine,
+                    media = targets,
+                    source = if (useQwen) TagEntry.SOURCE_AUTO else TagEntry.SOURCE_HEURISTIC,
+                ) { done, total ->
+                    dialog.setMessage(getString(R.string.batch_auto_progress, done, total))
+                }
+                ok = result.succeeded
+                fail = result.failed
+                added = result.added
+            } catch (e: Exception) {
+                Log.e("AlbumMarker", "batch autoTag failed", e)
+                fail = targets.size
+            } finally {
+                engine?.release()
+                dialog.dismiss()
+            }
+            afterBatchDone(added, fail, ok)
+        }
+    }
+
+    /** 批量操作完成后的收尾：刷新标签浮层、退出多选、提示结果。 */
+    private fun afterBatchDone(added: Int, failed: Int, ok: Int = 0) {
+        // 标签变了，重拉映射让网格浮层同步
+        if (showTags) tagsByUri = Graph.tagStore.tagsByUri()
+        exitSelectionMode()
+        val message = when {
+            added == 0 && failed == 0 -> getString(R.string.batch_tag_none_added)
+            failed > 0 -> getString(R.string.batch_auto_summary, ok, failed)
+            else -> getString(R.string.batch_tag_added, added)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setMessage(message)
+            .setPositiveButton(R.string.confirm, null)
+            .show()
     }
 
     // ---- 首页网格的标签显示开关 ----

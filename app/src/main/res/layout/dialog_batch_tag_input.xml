@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 批量手动输入标签的对话框内容 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp">
+
+    <EditText
+        android:id="@+id/etBatchTagInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/transparent"
+        android:hint="@string/tag_input_hint"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine"
+        android:maxLines="3"
+        android:minHeight="48dp"
+        android:textColor="?attr/colorOnSurface"
+        android:textColorHint="?android:attr/textColorSecondary" />
+</LinearLayout>

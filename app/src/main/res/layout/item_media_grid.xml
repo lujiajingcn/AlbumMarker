@@ -59,4 +59,18 @@
         app:layout_constraintStart_toStartOf="@id/ivThumb"
         app:layout_constraintTop_toTopOf="@id/ivThumb" />
 
+    <!-- 多选角标：右上角，蓝色圆底 + 白勾 -->
+    <ImageView
+        android:id="@+id/ivSelection"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:layout_margin="6dp"
+        android:background="@drawable/bg_selection_badge"
+        android:contentDescription="@string/selected"
+        android:padding="3dp"
+        android:src="@drawable/ic_check"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/ivThumb"
+        app:layout_constraintTop_toTopOf="@id/ivThumb" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

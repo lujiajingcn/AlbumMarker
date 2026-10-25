@@ -13,6 +13,20 @@
     <string name="hide_tags">隐藏标签</string>
     <string name="grid_tag_more">+%1$d</string>
 
+    <!-- 首页多选 -->
+    <string name="selected">已选中</string>
+    <string name="selection_none">未选择</string>
+    <string name="selection_count">已选 %1$d 项</string>
+    <string name="select_all">全选</string>
+    <string name="clear_selection">取消</string>
+    <string name="select_first_hint">请先长按照片或视频进行多选</string>
+    <string name="batch_tag_added">已为 %1$d 个文件添加标签</string>
+    <string name="batch_tag_none_added">所选文件都已有这些标签</string>
+    <string name="batch_auto_progress">正在分析 %1$d / %2$d …</string>
+    <string name="batch_auto_summary">完成：成功 %1$d 个，失败 %2$d 个</string>
+    <string name="batch_auto_confirm">将对 %1$d 个文件逐个运行模型（每张约 10–60 秒，耗时较长）。确定继续？</string>
+    <string name="batch_tag_confirm">确定</string>
+
     <!-- 权限 -->
     <string name="perm_title">需要相册访问权限</string>
     <string name="perm_message">本应用需要读取照片和视频的权限，才能浏览媒体、计算文件哈希并添加标签。</string>

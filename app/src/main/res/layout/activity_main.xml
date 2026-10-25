@@ -4,14 +4,15 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- 网格铺满整个内容区（含顶部工具栏区域），照片滚动时会从「更多」按钮下方穿过 -->
+    <!-- 网格铺满整个内容区（含顶部工具栏区域），照片滚动时会从「更多」按钮下方穿过。
+         底部为底部菜单栏留出空间，最后一行不会被菜单栏盖住 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvMedia"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:clipToPadding="false"
         android:padding="2dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomMenu"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -74,6 +75,7 @@
                 android:background="@null"
                 android:hint="@string/search_tags"
                 android:imeOptions="actionSearch"
+                android:importantForAutofill="no"
                 android:inputType="text"
                 android:singleLine="true"
                 android:textColor="?attr/colorOnSurface"
@@ -90,6 +92,124 @@
                 app:tint="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- 首页底部常驻菜单栏。多选时上方多出「已选 N 项」一行 -->
+    <LinearLayout
+        android:id="@+id/bottomMenu"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- 多选状态行：仅在多选模式下出现 -->
+        <LinearLayout
+            android:id="@+id/selectionBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/tvSelectionCount"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/selection_none"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelectAll"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/select_all" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnClearSelection"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:text="@string/clear_selection" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSelectTags"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="@string/select_tags"
+                android:textSize="12sp"
+                app:icon="@drawable/ic_tag_list"
+                app:iconGravity="start"
+                app:iconPadding="2dp"
+                app:iconSize="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnManualTag"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="@string/btn_manual_tag"
+                android:textSize="12sp"
+                app:icon="@drawable/ic_label"
+                app:iconGravity="start"
+                app:iconPadding="2dp"
+                app:iconSize="16dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnAutoTag"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="@string/btn_auto_tag"
+                android:textSize="12sp"
+                app:icon="@drawable/ic_auto_awesome"
+                app:iconGravity="start"
+                app:iconPadding="2dp"
+                app:iconSize="16dp" />
+        </LinearLayout>
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvEmpty"

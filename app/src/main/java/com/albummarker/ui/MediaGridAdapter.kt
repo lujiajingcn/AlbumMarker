@@ -31,9 +31,13 @@ import kotlinx.coroutines.launch
  *
  * 标签浮层：网格项带 [MediaGridItem.tags]，为空时整行隐藏；
  * 排布规则见 [GridTagDisplay]。
+ *
+ * 多选：选中态由 [MediaGridItem.selected] 携带，DiffUtil 自动刷新对应项；
+ * [onLongClick] 用于进入多选模式，点击是否切换选中由宿主判断。
  */
 class MediaGridAdapter(
     private val onClick: (MediaItem, Int) -> Unit,
+    private val onLongClick: (MediaItem, Int) -> Unit = { _, _ -> },
 ) : ListAdapter<MediaGridItem, MediaGridAdapter.VH>(DIFF) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -46,12 +50,15 @@ class MediaGridAdapter(
             binding.videoBadge.isVisible = media.isVideo
             binding.tvDuration.text = MediaQuery.formatDuration(media.durationMs)
             binding.ivThumb.setImageDrawable(null)
-            binding.ivThumb.tag = media.id
+            // 复用校验用 uri 而不是 id：图片表与视频表的 _ID 各自独立编号，会撞号
+            // （如 图片 /images/media/5 与 视频 /video/media/5），撞号会让视频
+            // 缩略图贴到图片的位置上。
+            binding.ivThumb.tag = media.uri.toString()
             if (media.isVideo) {
                 scope.launch {
                     val bmp = MediaBitmaps.thumbnail(binding.root.context, media)
                     // View 可能已被复用：仅当 tag 仍对得上时才落图
-                    if (binding.ivThumb.tag == media.id && bmp != null) {
+                    if (binding.ivThumb.tag == media.uri.toString() && bmp != null) {
                         binding.ivThumb.setImageBitmap(bmp)
                     }
                 }
@@ -62,7 +69,12 @@ class MediaGridAdapter(
                 }
             }
             bindTags(item.tags)
+            binding.ivSelection.isVisible = item.selected
             binding.root.setOnClickListener { onClick(media, bindingAdapterPosition) }
+            binding.root.setOnLongClickListener {
+                onLongClick(media, bindingAdapterPosition)
+                true
+            }
         }
 
         /** 渲染标签浮层；视图复用时先清干净，避免上一个 item 的残留。 */
