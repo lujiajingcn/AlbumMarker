@@ -21,9 +21,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.recyclerview.widget.GridLayoutManager
+import com.albummarker.data.MediaGridItem
 import com.albummarker.data.MediaItem
 import com.albummarker.data.MediaQuery
 import com.albummarker.data.TagEmbedder
+import com.albummarker.data.TagEntry
 import com.albummarker.data.TaggedMedia
 import com.albummarker.databinding.ActivityMainBinding
 import com.albummarker.ui.MediaGridAdapter
@@ -41,6 +43,11 @@ import androidx.lifecycle.lifecycleScope
  */
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        /** 标签显示开关的实例状态键（旋转屏幕等重建后恢复）。 */
+        private const val KEY_SHOW_TAGS = "show_tags"
+    }
+
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: MediaGridAdapter
 
@@ -48,6 +55,12 @@ class MainActivity : AppCompatActivity() {
     private var allItems: List<MediaItem> = emptyList()
     private var searchQuery: String = ""
     private var searchJob: Job? = null
+
+    /** 首页网格是否在缩略图上显示标签（「更多」菜单开关）。 */
+    private var showTags: Boolean = false
+
+    /** Uri 字符串 -> 标签列表；仅在 showTags 为 true 时有意义。 */
+    private var tagsByUri: Map<String, List<TagEntry>> = emptyMap()
 
     /** 搜索框展开时，系统返回键先收起搜索，而不是退出应用。 */
     private val searchBackCallback = object : OnBackPressedCallback(false) {
@@ -106,6 +119,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 旋转屏幕等重建后，标签显示开关要保持原状
+        showTags = savedInstanceState?.getBoolean(KEY_SHOW_TAGS) ?: false
+
         binding.btnMore.setOnClickListener { showOverflowMenu(it) }
         binding.btnSearch.setOnClickListener { openSearch() }
         binding.btnCloseSearch.setOnClickListener { closeSearch() }
@@ -137,11 +153,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_SHOW_TAGS, showTags)
+    }
+
     override fun onResume() {
         super.onResume()
         // 从查看器/模型管理返回时标签可能已变化，重新应用当前搜索条件
         if (::adapter.isInitialized && allItems.isNotEmpty()) {
-            refreshFilter()
+            // 标签在查看器里被改过，映射要重新拉，否则网格上显示的是旧标签
+            refreshFilter(reloadTags = true)
         }
     }
 
@@ -166,7 +188,8 @@ class MainActivity : AppCompatActivity() {
             val items = withContext(Dispatchers.IO) { MediaQuery.load(this@MainActivity) }
             allItems = items
             binding.pbLoading.isVisible = false
-            applyFilterNow(searchQuery)
+            // 首次进入也要把标签映射拉起来，否则冷启动时网格上不会有标签
+            refreshFilter(reloadTags = true)
         }
     }
 
@@ -225,9 +248,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshFilter() {
+    /**
+     * 重新按当前搜索条件刷新网格。
+     * @param reloadTags 是否顺带重拉「Uri -> 标签」映射（标签在查看器里被改过时需要）
+     */
+    private fun refreshFilter(reloadTags: Boolean = false) {
         searchJob?.cancel()
-        searchJob = lifecycleScope.launch { applyFilterNow(searchQuery) }
+        searchJob = lifecycleScope.launch {
+            if (reloadTags && showTags) {
+                // tagsByUri() 走内存态（标签本来就是按哈希存在内存里的），不需要查库
+                tagsByUri = Graph.tagStore.tagsByUri()
+            }
+            applyFilterNow(searchQuery)
+        }
     }
 
     private suspend fun applyFilterNow(query: String) {
@@ -240,7 +273,7 @@ class MainActivity : AppCompatActivity() {
             allItems.filter { it.uri.toString() in uris }
         }
         MediaBus.current = filtered
-        adapter.submitList(filtered) {
+        adapter.submitList(filtered.map { MediaGridItem(it, tagsFor(it)) }) {
             if (query.isNotBlank()) binding.rvMedia.scrollToPosition(0)
         }
         if (filtered.isEmpty()) {
@@ -253,6 +286,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 取某个媒体的标签（隐藏状态下恒为空）。 */
+    private fun tagsFor(item: MediaItem): List<TagEntry> {
+        if (!showTags) return emptyList()
+        return tagsByUri[item.uri.toString()].orEmpty()
+    }
+
+    // ---- 首页网格的标签显示开关 ----
+
+    /**
+     * 切换网格上的标签浮层。
+     *
+     * 标签映射由 TagStore 的内存态推导（标签本就按哈希存在内存里），
+     * 不给整个相册逐个算 SHA-256，切换开销与相册总量无关。
+     */
+    private fun setShowTags(visible: Boolean) {
+        if (showTags == visible) return
+        showTags = visible
+        refreshFilter(reloadTags = true)
+    }
+
     /** 首页专属「更多」菜单：锚定浮动按钮弹出，与查看器里的样式一致。 */
     private fun showOverflowMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
@@ -261,6 +314,16 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 R.id.action_model_manage -> {
                     startActivity(Intent(this, ModelManageActivity::class.java))
+                    true
+                }
+
+                R.id.action_show_tags -> {
+                    setShowTags(true)
+                    true
+                }
+
+                R.id.action_hide_tags -> {
+                    setShowTags(false)
                     true
                 }
 
@@ -309,7 +372,7 @@ class MainActivity : AppCompatActivity() {
             var ok = 0
             var fail = 0
             for ((index, item) in candidates.withIndex()) {
-                // 显式标注 Int：AGP 8.6.1 的 lint 推断不出内联算术表达式（index + 1）的类型，
+                // 显式标注 Int：AGP 8.6.1 的 lint 推断不出内联算术表达式（i + 1）的类型，
                 // 会误当成 String 报 StringFormatMatches 错。
                 val done: Int = index + 1
                 dialog.setMessage(

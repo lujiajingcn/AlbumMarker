@@ -7,6 +7,16 @@
         android:title="@string/title_model_manage"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_show_tags"
+        android:icon="@drawable/ic_label"
+        android:title="@string/show_tags"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_hide_tags"
+        android:icon="@drawable/ic_tag_list"
+        android:title="@string/hide_tags"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_embed_all"
         android:title="@string/embed_all"
         app:showAsAction="never" />

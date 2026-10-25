@@ -45,4 +45,18 @@
             android:textSize="11sp" />
     </LinearLayout>
 
+    <!-- 标签浮层：首页「更多 → 显示标签」时出现，锚在缩略图左上角，
+         避开左下角的视频时长角标 -->
+    <LinearLayout
+        android:id="@+id/tagRow"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="@id/ivThumb"
+        app:layout_constraintStart_toStartOf="@id/ivThumb"
+        app:layout_constraintTop_toTopOf="@id/ivThumb" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

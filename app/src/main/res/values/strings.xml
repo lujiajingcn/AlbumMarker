@@ -8,6 +8,11 @@
     <string name="search_close">关闭搜索</string>
     <string name="search_no_result">没有找到带该标签的照片</string>
 
+    <!-- 首页「显示/隐藏标签」 -->
+    <string name="show_tags">显示标签</string>
+    <string name="hide_tags">隐藏标签</string>
+    <string name="grid_tag_more">+%1$d</string>
+
     <!-- 权限 -->
     <string name="perm_title">需要相册访问权限</string>
     <string name="perm_message">本应用需要读取照片和视频的权限，才能浏览媒体、计算文件哈希并添加标签。</string>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页网格上的单个标签 chip；底色由代码按标签来源着色 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="3dp"
+    android:background="@drawable/bg_grid_tag_chip"
+    android:ellipsize="end"
+    android:maxWidth="40dp"
+    android:maxLines="1"
+    android:paddingHorizontal="5dp"
+    android:paddingVertical="1dp"
+    android:singleLine="true"
+    android:textColor="@android:color/white"
+    android:textSize="11sp" />

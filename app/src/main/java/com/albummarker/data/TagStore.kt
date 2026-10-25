@@ -60,23 +60,43 @@ class TagStore(context: Context) :
     private val _tagsFlow = MutableStateFlow<Map<String, List<TagEntry>>>(emptyMap())
     val tagsFlow: StateFlow<Map<String, List<TagEntry>>> = _tagsFlow.asStateFlow()
 
+    /**
+     * 哈希 -> 媒体 Uri（打标签那一刻的 Uri）。
+     *
+     * 标签以哈希为键、而首页网格的媒体以 Uri 为键，这个映射把两者接上。
+     * 与 [_tagsFlow] 一起在 [loadAll] 时读入内存，写操作同步维护。
+     */
+    private val uriByHash = mutableMapOf<String, String>()
+
     /** 应用启动时调用一次，把全量标签读进内存。 */
     fun loadAll() {
         val map = mutableMapOf<String, MutableList<TagEntry>>()
+        val uris = mutableMapOf<String, String>()
+        // LEFT JOIN：tags 表可能有行没有对应的 media_tags 行（加标签时没带媒体信息），
+        // 这类标签仍要进 _tagsFlow；media_tags.uri 取不到时留空即可。
         readableDatabase.rawQuery(
-            "SELECT hash, tag, source, created_at FROM tags ORDER BY created_at ASC",
+            """
+            SELECT t.hash, t.tag, t.source, t.created_at, m.uri
+            FROM $TABLE_TAGS t
+            LEFT JOIN $TABLE_MEDIA m ON m.hash = t.hash
+            ORDER BY t.created_at ASC
+            """.trimIndent(),
             null
         ).use { c ->
             val iHash = c.getColumnIndexOrThrow("hash")
             val iTag = c.getColumnIndexOrThrow("tag")
             val iSource = c.getColumnIndexOrThrow("source")
             val iCreated = c.getColumnIndexOrThrow("created_at")
+            val iUri = c.getColumnIndexOrThrow("uri")
             while (c.moveToNext()) {
                 val hash = c.getString(iHash)
                 map.getOrPut(hash) { mutableListOf() }
                     .add(TagEntry(c.getString(iTag), c.getString(iSource), c.getLong(iCreated)))
+                if (!c.isNull(iUri)) uris.putIfAbsent(hash, c.getString(iUri))
             }
         }
+        uriByHash.clear()
+        uriByHash.putAll(uris)
         _tagsFlow.value = map
     }
 
@@ -129,6 +149,7 @@ class TagStore(context: Context) :
             db.endTransaction()
         }
         if (inserted > 0) refreshHash(hash)
+        if (media != null) uriByHash[hash] = media.uri.toString()
         return inserted
     }
 
@@ -141,6 +162,7 @@ class TagStore(context: Context) :
         ).use { it.moveToFirst() && it.getInt(0) > 0 }
         if (!remaining) {
             db.delete(TABLE_MEDIA, "hash = ?", arrayOf(hash))
+            uriByHash.remove(hash)
         }
         refreshHash(hash)
     }
@@ -192,6 +214,8 @@ class TagStore(context: Context) :
         }
         refreshHash(oldHash)
         refreshHash(newHash)
+        // 内存映射跟着搬家：标签行换到新哈希，Uri 归属不变
+        uriByHash.remove(oldHash)?.let { uriByHash[newHash] = it }
     }
 
     /** 使某个 Uri 的哈希缓存失效（文件内容被本应用改写后调用，下次查询重新计算）。 */
@@ -253,6 +277,24 @@ class TagStore(context: Context) :
         writableDatabase.insertWithOnConflict(
             TABLE_HASH_CACHE, null, values, SQLiteDatabase.CONFLICT_REPLACE
         )
+    }
+
+    /**
+     * 媒体 Uri -> 标签列表（首页网格浮层用）。
+     *
+     * 直接由内存态推导（[tagsFlow] 的哈希 -> 标签 + 哈希 -> Uri），
+     * 不再查库：切换「显示标签」是纯内存操作，代价与相册总量无关。
+     *
+     * 已知局限：Uri 是打标签那一刻的，文件被改名/移动后这里对不上
+     * （查看器按内容哈希算，仍能查到标签）。
+     */
+    fun tagsByUri(): Map<String, List<TagEntry>> {
+        val out = mutableMapOf<String, MutableList<TagEntry>>()
+        for ((hash, entries) in _tagsFlow.value) {
+            val uri = uriByHash[hash] ?: continue
+            out.getOrPut(uri) { mutableListOf() }.addAll(entries)
+        }
+        return out
     }
 
     /**
