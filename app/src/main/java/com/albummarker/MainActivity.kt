@@ -309,8 +309,11 @@ class MainActivity : AppCompatActivity() {
             var ok = 0
             var fail = 0
             for ((index, item) in candidates.withIndex()) {
+                // 显式标注 Int：AGP 8.6.1 的 lint 推断不出内联算术表达式（index + 1）的类型，
+                // 会误当成 String 报 StringFormatMatches 错。
+                val done: Int = index + 1
                 dialog.setMessage(
-                    getString(R.string.embed_batch_progress, index + 1, candidates.size)
+                    getString(R.string.embed_batch_progress, done, candidates.size)
                 )
                 try {
                     val result = withContext(Dispatchers.IO) {
