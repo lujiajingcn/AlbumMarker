@@ -229,7 +229,14 @@ class MediaViewerActivity : AppCompatActivity() {
             .setAction(R.string.undo) {
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
-                        Graph.tagStore.addTags(hash, listOf(tag), TagEntry.SOURCE_MANUAL)
+                        // 必须带上 media：TagStore.removeTag 在标签清空时删掉了 media_tags 行，
+                        // 不补回来的话这个标签在首页网格与标签搜索里都会「查无此项」
+                        Graph.tagStore.addTags(
+                            hash,
+                            listOf(tag),
+                            TagEntry.SOURCE_MANUAL,
+                            current,
+                        )
                     }
                     updateChips()
                 }
