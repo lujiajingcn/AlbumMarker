@@ -140,6 +140,7 @@ class MediaViewerActivity : AppCompatActivity() {
         binding.btnSelectTags.setOnClickListener { showTagPickerDialog() }
         binding.btnManualTag.setOnClickListener { toggleManualPanel() }
         binding.btnAutoTag.setOnClickListener { onAutoTagClicked() }
+        binding.btnStopAutoTag.setOnClickListener { viewModel.resetAutoTag() }
         binding.btnVoice.setOnClickListener { startVoiceInput() }
         binding.btnConfirmTag.setOnClickListener { confirmManualTags() }
         binding.etTagInput.imeOptions = EditorInfo.IME_ACTION_DONE
@@ -434,21 +435,26 @@ class MediaViewerActivity : AppCompatActivity() {
             viewModel.autoTagState.collect { state ->
                 Log.d(TAG, "autoTagState collected: " + state.javaClass.simpleName)
                 when (state) {
-                    is ViewerViewModel.AutoTagState.Idle ->
+                    is ViewerViewModel.AutoTagState.Idle -> {
                         binding.progressOverlay.isVisible = false
+                        binding.btnStopAutoTag.isVisible = false
+                    }
 
                     is ViewerViewModel.AutoTagState.Running -> {
                         binding.progressOverlay.isVisible = true
+                        binding.btnStopAutoTag.isVisible = true
                         binding.tvProgress.text = state.message
                     }
 
                     is ViewerViewModel.AutoTagState.Suggestions -> {
                         binding.progressOverlay.isVisible = false
+                        binding.btnStopAutoTag.isVisible = false
                         showSuggestionsDialog(state.tags, state.engineId)
                     }
 
                     is ViewerViewModel.AutoTagState.Error -> {
                         binding.progressOverlay.isVisible = false
+                        binding.btnStopAutoTag.isVisible = false
                         toast(getString(R.string.auto_tag_failed, state.message))
                     }
                 }

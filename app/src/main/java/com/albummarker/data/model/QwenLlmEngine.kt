@@ -3,6 +3,7 @@ package com.albummarker.data.model
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
+import com.albummarker.data.TagParser
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
@@ -180,11 +181,10 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
 
         /** 面向 Qwen 系列的中文打标提示词。 */
         const val PROMPT =
-            "你是一个图片标签助手。请根据图片内容，用简体中文列出 0 到 3 个最相关的标签。" +
-                "最多输出 3 个；如果图片内容不明确，可以一个标签也不输出。标签应为简短的名词或名词短语，覆盖：场景或地点、主要对象、动作或事件、" +
-                "明显属性（颜色、天气、时间段）、内容类别。只直接输出标签词本身，" +
-                "不要输出「场景：」「主要对象：」「明显属性：」这类分类前缀（例如输出「公园」，不要输出「场景：公园」）。" +
-                "多个标签用中文逗号「，」分隔，不要输出编号、解释或任何其他内容。"
+            "只输出 0 到 3 个简短的中文标签，用中文逗号「，」分隔；" +
+                "标签描述画面中的场景、物体、动作或明显属性。" +
+                "不要输出解释、分类名称、编号、思考过程（如 <think>）或任何提示词。" +
+                "没有把握时什么都不输出。"
 
         private val SEPARATORS = charArrayOf(
             '，', ',', '、', ';', '；', '\n', '\r', '\t', ' ', '。', '.'
@@ -203,7 +203,9 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
                     .removePrefix("-").removePrefix("•").trim()
                 tag = tag.replaceFirst(NUMBERING_PREFIX, "")
                 if (tag.isEmpty() || tag.all { it.isDigit() }) continue
-                if (tag.length > MAX_TAG_LEN) tag = tag.take(MAX_TAG_LEN)
+                if (tag.length > MAX_TAG_LEN) continue
+                // 模型可能把提示词、分类名或 <think> 当标签输出，自动结果里直接丢弃
+                if (TagParser.isAutoTagNoise(tag)) continue
                 result.add(tag)
                 if (result.size >= MAX_TAG_COUNT) break
             }

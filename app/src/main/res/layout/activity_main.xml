@@ -17,6 +17,21 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- 多选模式左上角退出按钮：与右侧搜索按钮同款 44dp 圆形白色图标 -->
+    <ImageButton
+        android:id="@+id/btnExitSelection"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="4dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_more_button"
+        android:contentDescription="@string/exit_selection"
+        android:src="@drawable/ic_close"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@android:color/white" />
+
     <!-- 悬浮搜索 + 更多按钮；搜索框展开时两个按钮隐藏 -->
     <ImageButton
         android:id="@+id/btnSearch"

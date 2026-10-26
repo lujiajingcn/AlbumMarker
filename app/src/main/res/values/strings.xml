@@ -16,13 +16,16 @@
     <string name="selected">已选中</string>
     <string name="selection_none">未选择</string>
     <string name="selection_count">已选 %1$d 项</string>
+    <string name="exit_selection">退出多选</string>
     <string name="select_all">全选</string>
     <string name="clear_selection">取消</string>
     <string name="select_first_hint">请先长按照片或视频进行多选</string>
     <string name="batch_tag_added">已为 %1$d 个文件添加标签</string>
     <string name="batch_tag_none_added">所选文件都已有这些标签</string>
+    <string name="batch_auto_done">完成：分析 %1$d 个文件，新增 %2$d 个标签</string>
+    <string name="batch_auto_none_added">分析完成，没有生成新标签</string>
     <string name="batch_auto_progress">正在分析 %1$d / %2$d …</string>
-    <string name="batch_auto_summary">完成：成功 %1$d 个，失败 %2$d 个</string>
+    <string name="batch_auto_summary">完成：成功 %1$d 个文件，失败 %2$d 个</string>
     <string name="batch_auto_confirm_model">将使用「%1$s」对 %2$d 个文件逐个运行模型（耗时较长）。确定继续？</string>
     <string name="batch_tag_confirm">确定</string>
 
@@ -68,6 +71,7 @@
     <string name="auto_tag_install">去安装模型</string>
     <string name="auto_tag_heuristic">使用启发式标签</string>
     <string name="auto_tag_cancel">取消</string>
+    <string name="stop_auto_tag">停止</string>
     <string name="suggest_title">建议标签（可勾选）</string>
     <string name="suggest_from_model">来源：%1$s（LiteRT-LM 本地模型）</string>
     <string name="suggest_from_heuristic">来源：启发式分析（未安装模型）</string>

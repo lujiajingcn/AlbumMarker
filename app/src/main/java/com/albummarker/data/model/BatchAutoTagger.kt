@@ -11,6 +11,8 @@ import com.albummarker.data.TagParser
 import com.albummarker.data.TagStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -52,6 +54,8 @@ object BatchAutoTagger {
         var fail = 0
         var added = 0
         media.forEachIndexed { index, item ->
+            // 用户点「停止」后不再开始下一张
+            currentCoroutineContext().ensureActive()
             withContext(Dispatchers.Main) { onProgress(index + 1, media.size) }
             var bitmaps: List<Bitmap> = emptyList()
             try {
@@ -61,6 +65,8 @@ object BatchAutoTagger {
                     throw IllegalStateException("无法从该媒体提取画面帧")
                 }
                 val tags = AutoTagEngine.normalize(engine.suggestTags(input))
+                // 当前这张推理完成后如果已经取消，不要再写入标签
+                currentCoroutineContext().ensureActive()
                 if (tags.isNotEmpty()) {
                     // 标签以文件哈希为键，写入前要先算出哈希
                     val hash = MediaHasher.hashOfCached(context, store, item)

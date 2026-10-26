@@ -360,7 +360,7 @@ class TagStore(context: Context) :
      * 只处理 source=auto，手动标签保持原样；冲突时保留已存在的干净标签。
      * @return 被修改/删除的行数
      */
-    fun cleanAutoTagPrefixes(): Int {
+    fun cleanAutoTagNoise(): Int {
         val rows = mutableListOf<Pair<String, String>>()
         readableDatabase.rawQuery(
             "SELECT hash, tag FROM $TABLE_TAGS WHERE source = ?",
@@ -376,12 +376,13 @@ class TagStore(context: Context) :
         try {
             for ((hash, tag) in rows) {
                 val clean = TagParser.stripCategoryPrefix(tag)
-                if (clean == tag) continue
-                val alreadyExists = clean.isNotEmpty() && db.rawQuery(
+                val noisy = clean.isEmpty() || TagParser.isAutoTagNoise(clean)
+                if (!noisy && clean == tag) continue
+                val alreadyExists = !noisy && db.rawQuery(
                     "SELECT 1 FROM $TABLE_TAGS WHERE hash = ? AND tag = ?",
                     arrayOf(hash, clean)
                 ).use { it.moveToFirst() }
-                if (clean.isEmpty() || alreadyExists) {
+                if (noisy || alreadyExists) {
                     db.delete(TABLE_TAGS, "hash = ? AND tag = ?", arrayOf(hash, tag))
                 } else {
                     val values = ContentValues().apply { put("tag", clean) }

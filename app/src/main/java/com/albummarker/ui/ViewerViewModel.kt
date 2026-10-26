@@ -16,6 +16,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,6 +83,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     HeuristicTagEngine()
                 }
                 val tags = AutoTagEngine.normalize(engine.suggestTags(payload))
+                // 用户可能已经点了「停止」；推理返回后不要再弹旧结果
+                currentCoroutineContext().ensureActive()
                 Log.d(TAG, "engine done: $tags")
                 _autoTagState.value = AutoTagState.Suggestions(tags, engine.id)
                 Log.d(TAG, "state -> Suggestions(${tags.size})")

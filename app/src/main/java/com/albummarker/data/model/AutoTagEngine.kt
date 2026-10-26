@@ -40,7 +40,7 @@ interface AutoTagEngine {
         fun normalize(tags: List<String>): List<String> =
             tags.asSequence()
                 .map { TagParser.stripCategoryPrefix(it) }
-                .filter { it.isNotEmpty() }
+                .filter { it.isNotEmpty() && !TagParser.isAutoTagNoise(it) }
                 .distinctBy { it.lowercase() }
                 .take(MAX_AUTO_TAGS)
                 .toList()

@@ -47,6 +47,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private var allItems: List<MediaItem> = emptyList()
     private var searchQuery: String = ""
     private var searchJob: Job? = null
+    private var batchAutoJob: Job? = null
 
     /** 首页网格是否在缩略图上显示标签（「更多」菜单开关）。 */
     private var showTags: Boolean = false
@@ -156,6 +158,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnMore.setOnClickListener { showOverflowMenu(it) }
         binding.btnSearch.setOnClickListener { openSearch() }
         binding.btnCloseSearch.setOnClickListener { closeSearch() }
+        binding.btnExitSelection.setOnClickListener { exitSelectionMode() }
         binding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
@@ -374,6 +377,7 @@ class MainActivity : AppCompatActivity() {
         selectionMode = true
         selectionBackCallback.isEnabled = true
         binding.selectionBar.isVisible = true
+        binding.btnExitSelection.isVisible = true
         selectedItems = listOf(item)
         updateSelectionUi()
     }
@@ -389,6 +393,7 @@ class MainActivity : AppCompatActivity() {
         selectionMode = false
         selectionBackCallback.isEnabled = false
         binding.selectionBar.isVisible = false
+        binding.btnExitSelection.isVisible = false
         selectedItems = emptyList()
     }
 
@@ -508,7 +513,7 @@ class MainActivity : AppCompatActivity() {
                 dialog.setMessage(getString(R.string.batch_auto_progress, done, total))
             }
             dialog.dismiss()
-            afterBatchDone(result.added, result.failed)
+            afterBatchDone(result.added, result.failed, result.succeeded)
         }
     }
 
@@ -575,9 +580,15 @@ class MainActivity : AppCompatActivity() {
     ) {
         val dialog = MaterialAlertDialogBuilder(this)
             .setMessage(getString(R.string.batch_auto_progress, 0, targets.size))
+            .setNegativeButton(R.string.stop_auto_tag, null)
             .setCancelable(false)
-            .show()
-        lifecycleScope.launch {
+            .create()
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+            batchAutoJob?.cancel()
+            dialog.dismiss()
+        }
+        batchAutoJob = lifecycleScope.launch {
             var ok = 0
             var fail = 0
             var added = 0
@@ -590,8 +601,10 @@ class MainActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) { qwen.prepare(modelPath) }
                         qwen
                     } catch (t: Throwable) {
-                        // prepare 失败时 engine 还没赋值，必须在这里释放局部实例
-                        runCatching { withContext(Dispatchers.IO) { qwen.release() } }
+                        // prepare 失败/被取消时 engine 还没赋值，必须在这里释放局部实例
+                        runCatching {
+                            withContext(NonCancellable + Dispatchers.IO) { qwen.release() }
+                        }
                         throw t
                     }
                 } else {
@@ -615,23 +628,29 @@ class MainActivity : AppCompatActivity() {
                 Log.e("AlbumMarker", "batch autoTag failed", t)
                 fail = targets.size
             } finally {
-                // release 内部可能等待推理锁，不能阻塞主线程
-                runCatching { withContext(Dispatchers.IO) { engine?.release() } }
+                // release 内部可能等待推理锁，不能阻塞主线程；取消时也必须完成释放
+                runCatching {
+                    withContext(NonCancellable + Dispatchers.IO) { engine?.release() }
+                }
                 dialog.dismiss()
             }
-            afterBatchDone(added, fail, ok)
+            afterBatchDone(added, fail, ok, auto = true)
         }
     }
 
     /** 批量操作完成后的收尾：刷新标签浮层、退出多选、提示结果。 */
-    private fun afterBatchDone(added: Int, failed: Int, ok: Int = 0) {
+    private fun afterBatchDone(added: Int, failed: Int, ok: Int = 0, auto: Boolean = false) {
         // 标签变了，重拉映射让网格浮层同步
         if (showTags) tagsByUri = Graph.tagStore.tagsByUri()
         exitSelectionMode()
         val message = when {
-            added == 0 && failed == 0 -> getString(R.string.batch_tag_none_added)
             failed > 0 -> getString(R.string.batch_auto_summary, ok, failed)
-            else -> getString(R.string.batch_tag_added, added)
+            ok == 0 -> getString(R.string.batch_tag_none_added)
+            added == 0 -> getString(
+                if (auto) R.string.batch_auto_none_added else R.string.batch_tag_none_added
+            )
+            auto -> getString(R.string.batch_auto_done, ok, added)
+            else -> getString(R.string.batch_tag_added, ok)
         }
         MaterialAlertDialogBuilder(this)
             .setMessage(message)

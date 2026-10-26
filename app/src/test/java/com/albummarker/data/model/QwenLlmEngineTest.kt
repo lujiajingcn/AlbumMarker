@@ -40,6 +40,12 @@ class QwenLlmEngineTest {
     }
 
     @Test
+    fun ` drops prompt echoes and thinking tags `() {
+        val raw = "好的，图片标签助手，请根据图片内容，用简体中文列出，场景，公园，树木，<think>"
+        assertEquals(listOf("公园", "树木"), QwenLlmEngine.parseTags(raw))
+    }
+
+    @Test
     fun ` normalize caps at three and allows empty `() {
         assertEquals(
             listOf("a", "b", "c"),
