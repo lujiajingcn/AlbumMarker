@@ -60,7 +60,7 @@ object BatchAutoTagger {
                 if (input.bitmaps.isEmpty()) {
                     throw IllegalStateException("无法从该媒体提取画面帧")
                 }
-                val tags = engine.suggestTags(input)
+                val tags = AutoTagEngine.normalize(engine.suggestTags(input))
                 if (tags.isNotEmpty()) {
                     // 标签以文件哈希为键，写入前要先算出哈希
                     val hash = MediaHasher.hashOfCached(context, store, item)

@@ -95,7 +95,7 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
             val active = engine ?: throw IllegalStateException("Qwen 模型未加载")
             generate(active, input)
         }
-        parseTags(raw)
+        AutoTagEngine.normalize(parseTags(raw))
     }
 
     private fun generate(engine: Engine, input: TagInput): String {
@@ -180,8 +180,8 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
 
         /** 面向 Qwen 系列的中文打标提示词。 */
         const val PROMPT =
-            "你是一个图片标签助手。请根据图片内容，用简体中文列出 5 到 8 个最相关的标签。" +
-                "标签应为简短的名词或名词短语，覆盖：场景或地点、主要对象、动作或事件、" +
+            "你是一个图片标签助手。请根据图片内容，用简体中文列出 0 到 3 个最相关的标签。" +
+                "最多输出 3 个；如果图片内容不明确，可以一个标签也不输出。标签应为简短的名词或名词短语，覆盖：场景或地点、主要对象、动作或事件、" +
                 "明显属性（颜色、天气、时间段）、内容类别。只输出标签本身，" +
                 "多个标签用中文逗号「，」分隔，不要输出编号、解释或任何其他内容。"
 
@@ -210,6 +210,6 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
         }
 
         const val MAX_TAG_LEN = 20
-        const val MAX_TAG_COUNT = 12
+        const val MAX_TAG_COUNT = AutoTagEngine.MAX_AUTO_TAGS
     }
 }

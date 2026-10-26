@@ -9,7 +9,7 @@ class QwenLlmEngineTest {
     @Test
     fun ` parses comma separated tags `() {
         val tags = QwenLlmEngine.parseTags("海边，日落，旅行，人物")
-        assertEquals(listOf("海边", "日落", "旅行", "人物"), tags)
+        assertEquals(listOf("海边", "日落", "旅行"), tags)
     }
 
     @Test
@@ -36,5 +36,14 @@ class QwenLlmEngineTest {
     fun ` blank output yields empty `() {
         assertTrue(QwenLlmEngine.parseTags("   \n ").isEmpty())
         assertTrue(QwenLlmEngine.parseTags("").isEmpty())
+    }
+
+    @Test
+    fun ` normalize caps at three and allows empty `() {
+        assertEquals(
+            listOf("a", "b", "c"),
+            AutoTagEngine.normalize(listOf("a", "b", "c", "d")),
+        )
+        assertTrue(AutoTagEngine.normalize(listOf(" ", "  ", "")).isEmpty())
     }
 }

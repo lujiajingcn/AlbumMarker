@@ -73,7 +73,7 @@
     <string name="suggest_from_model">来源：%1$s（LiteRT-LM 本地模型）</string>
     <string name="suggest_from_heuristic">来源：启发式分析（未安装模型）</string>
     <string name="suggest_add_selected">添加所选（%1$d）</string>
-    <string name="suggest_empty">模型没有返回有效标签，请重试或改用启发式标签</string>
+    <string name="suggest_empty">模型没有返回标签，可重试或改用启发式标签</string>
     <string name="auto_tag_failed">自动打标失败：%1$s</string>
     <string name="auto_tag_oom">内存不足，建议改用较小的模型（如 Qwen3.5-0.8B-VL）后重试</string>
 

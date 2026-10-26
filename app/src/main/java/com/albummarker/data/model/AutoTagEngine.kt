@@ -28,5 +28,20 @@ interface AutoTagEngine {
     companion object {
         const val ID_QWEN = "qwen"
         const val ID_HEURISTIC = "heuristic"
+
+        /** 自动打标结果上限：最多 3 个标签。 */
+        const val MAX_AUTO_TAGS = 3
+
+        /**
+         * 统一约束自动标签：去空白、去重（大小写不敏感）、最多 3 个。
+         * 允许 0 个（模型没有把握时不强行编造标签）。
+         */
+        fun normalize(tags: List<String>): List<String> =
+            tags.asSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinctBy { it.lowercase() }
+                .take(MAX_AUTO_TAGS)
+                .toList()
     }
 }

@@ -48,7 +48,7 @@ class HeuristicTagEngine : AutoTagEngine {
                 }
             }
 
-            tags.filter { it.isNotBlank() }.distinct().take(MAX_TAGS)
+            AutoTagEngine.normalize(tags)
         }
 
     data class BitmapStats(
@@ -60,8 +60,6 @@ class HeuristicTagEngine : AutoTagEngine {
     )
 
     companion object {
-        private const val MAX_TAGS = 12
-
         fun analyzeBitmap(bmp: Bitmap): BitmapStats {
             val w = 32
             val h = 32

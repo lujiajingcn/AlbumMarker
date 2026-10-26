@@ -80,7 +80,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 } else {
                     HeuristicTagEngine()
                 }
-                val tags = engine.suggestTags(payload)
+                val tags = AutoTagEngine.normalize(engine.suggestTags(payload))
                 Log.d(TAG, "engine done: $tags")
                 _autoTagState.value = AutoTagState.Suggestions(tags, engine.id)
                 Log.d(TAG, "state -> Suggestions(${tags.size})")
