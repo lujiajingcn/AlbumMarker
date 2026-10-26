@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ 备份/迁移规则：模型文件可能有数 GB，必须排除。 -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="models" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="models" />
+    </device-transfer>
+</data-extraction-rules>

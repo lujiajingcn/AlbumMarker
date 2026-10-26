@@ -12,8 +12,10 @@ import com.albummarker.data.model.HeuristicTagEngine
 import com.albummarker.data.model.QwenLlmEngine
 import com.albummarker.data.model.TagInput
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +42,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private var autoJob: Job? = null
     private var qwenEngine: QwenLlmEngine? = null
 
+    /** onCleared 后 ViewModel 的 scope 已取消，释放模型必须用独立的后台 scope。 */
+    private val releaseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * 对当前媒体执行自动打标。
      * @param useQwen true 时加载 [modelPath] 指向的 Qwen 模型；false 走启发式引擎。
@@ -58,12 +63,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 )
             )
             Log.d(TAG, "state -> Running (modelLoaded=$modelAlreadyLoaded)")
+            var input: TagInput? = null
             try {
-                val input = withContext(Dispatchers.IO) {
+                val payload = withContext(Dispatchers.IO) {
                     Log.d(TAG, "buildInput start")
                     buildInput(app, media).also { Log.d(TAG, "buildInput done: ${it.bitmaps.size} bitmaps") }
                 }
-                if (input.bitmaps.isEmpty()) {
+                input = payload
+                if (payload.bitmaps.isEmpty()) {
                     throw IllegalStateException("无法从该媒体提取画面帧")
                 }
                 val engine: AutoTagEngine = if (qwenPath != null) {
@@ -73,16 +80,25 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 } else {
                     HeuristicTagEngine()
                 }
-                val tags = engine.suggestTags(input)
+                val tags = engine.suggestTags(payload)
                 Log.d(TAG, "engine done: $tags")
                 _autoTagState.value = AutoTagState.Suggestions(tags, engine.id)
                 Log.d(TAG, "state -> Suggestions(${tags.size})")
             } catch (cancel: CancellationException) {
                 Log.d(TAG, "cancelled")
                 throw cancel
-            } catch (e: Exception) {
-                Log.e(TAG, "autoTag failed", e)
-                _autoTagState.value = AutoTagState.Error(e.message ?: e.javaClass.simpleName)
+            } catch (t: Throwable) {
+                Log.e(TAG, "autoTag failed", t)
+                _autoTagState.value = AutoTagState.Error(
+                    if (t is OutOfMemoryError) {
+                        app.getString(R.string.auto_tag_oom)
+                    } else {
+                        t.message ?: t.javaClass.simpleName
+                    }
+                )
+            } finally {
+                // 输入位图只服务这一次推理；无论成功、失败还是取消都及时回收。
+                input?.bitmaps?.forEach { runCatching { it.recycle() } }
             }
         }
     }
@@ -108,8 +124,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
 
     override fun onCleared() {
-        qwenEngine?.release()
+        autoJob?.cancel()
+        val engine = qwenEngine
         qwenEngine = null
+        // release() 内部要等推理/加载释放锁；不能放在主线程，否则 2B 推理时退出会 ANR。
+        releaseScope.launch { engine?.release() }
         super.onCleared()
     }
 }

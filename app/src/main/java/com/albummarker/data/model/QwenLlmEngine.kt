@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -28,7 +29,7 @@ import kotlin.math.roundToInt
 class QwenLlmEngine(private val context: Context) : AutoTagEngine {
 
     override val id: String = AutoTagEngine.ID_QWEN
-    override val displayName: String = "Qwen3.5-0.8B-VL（LiteRT-LM）"
+    override var displayName: String = "Qwen3.5-0.8B-VL（LiteRT-LM）"
 
     private val lock = Any()
 
@@ -39,10 +40,24 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
     @Volatile
     private var loadedPath: String? = null
 
-    /** 幂等加载模型；重复调用同路径不会重建。调用方应放在 IO 线程。 */
+    /** 用于判断同名模型文件是否被替换（路径相同但内容已变时应重建）。 */
+    @Volatile
+    private var loadedLength: Long = -1L
+
+    @Volatile
+    private var loadedModified: Long = 0L
+
+    /** 幂等加载模型；同路径且文件未变化时复用。调用方应放在 IO 线程。 */
     fun prepare(modelPath: String) {
         synchronized(lock) {
-            if (loadedPath == modelPath && engine != null) return
+            val modelFile = File(modelPath)
+            if (loadedPath == modelPath &&
+                engine != null &&
+                loadedLength == modelFile.length() &&
+                loadedModified == modelFile.lastModified()
+            ) {
+                return
+            }
             release()
             val config = EngineConfig(
                 modelPath = modelPath,
@@ -53,9 +68,22 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
                 cacheDir = context.cacheDir.path,
             )
             val loaded = Engine(config)
-            loaded.initialize()
+            try {
+                loaded.initialize()
+            } catch (t: Throwable) {
+                // initialize 失败时 engine 还没挂到字段上，必须在这里关掉，避免泄漏 native 资源。
+                runCatching { loaded.close() }
+                throw t
+            }
             engine = loaded
             loadedPath = modelPath
+            loadedLength = modelFile.length()
+            loadedModified = modelFile.lastModified()
+            displayName = modelFile.name
+                .removeSuffix(".litertlm")
+                .replace('_', ' ')
+                .trim() + "（LiteRT-LM）"
+            Log.d(TAG, "model loaded: ${modelFile.name} (${loadedLength} bytes)")
         }
     }
 
@@ -130,6 +158,8 @@ class QwenLlmEngine(private val context: Context) : AutoTagEngine {
             runCatching { engine?.close() }
             engine = null
             loadedPath = null
+            loadedLength = -1L
+            loadedModified = 0L
         }
     }
 

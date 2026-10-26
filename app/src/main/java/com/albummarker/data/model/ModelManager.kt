@@ -5,7 +5,10 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.core.content.edit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,17 +19,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * 需求 6：Qwen3.5-0.8B 本地模型的安装与管理。
+ * 本地 LiteRT-LM 模型管理（支持多个 `.litertlm` 共存）。
  *
- * - 模型为 LiteRT-LM 的 `.litertlm` 包（推荐 VL 视觉版，约 1.3 GB）；
- * - 模型保存于应用私有目录 files/models/（无需额外存储权限）；
- * - 支持两条安装路径：SAF 文件导入、URL 直链下载（.part 落盘后原子改名）；
- * - 状态通过 StateFlow 暴露：未安装 / 已就绪 / 异常。
+ * - 模型保存在应用私有目录 files/models/，无需额外存储权限；
+ * - 可同时安装 Qwen3.5-0.8B-VL、Qwen3.5-2B-VL 等，记录一个「当前模型」；
+ * - 自动打标时如果安装了多个模型，会让用户选择；
+ * - 支持 SAF 导入、URL 下载（.part 落盘后原子改名）、按模型删除。
  */
 class ModelManager(private val context: Context) {
 
     companion object {
-        private const val TAG = "ModelManager"
         private const val PREFS = "model_manager"
         private const val KEY_PATH = "active_model_path"
         private const val KEY_NAME = "active_model_name"
@@ -39,18 +41,25 @@ class ModelManager(private val context: Context) {
         private const val BUFFER_SIZE = 1 shl 16
     }
 
-    sealed class ModelState {
-        object NotInstalled : ModelState()
-        data class Ready(val file: File, val sizeBytes: Long) : ModelState()
-        data class Broken(val message: String) : ModelState()
+    /** 已安装的模型文件。 */
+    data class InstalledModel(val file: File) {
+        val sizeBytes: Long get() = file.length()
+
+        /** 去掉后缀、下划线换成空格的展示名，如 `Qwen3.5-2B-VL`。 */
+        val displayName: String
+            get() = file.name
+                .removeSuffix(".litertlm")
+                .replace('_', ' ')
+                .trim()
     }
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val appContext = context.applicationContext
     private val modelsDir: File = File(context.filesDir, "models").apply { mkdirs() }
 
-    private val _state = MutableStateFlow<ModelState>(ModelState.NotInstalled)
-    val state: StateFlow<ModelState> = _state.asStateFlow()
+    private val _models = MutableStateFlow<List<InstalledModel>>(emptyList())
+
+    /** 已安装模型列表（按文件名排序）。 */
+    val models: StateFlow<List<InstalledModel>> = _models.asStateFlow()
 
     /** 当前激活的模型文件；未安装或仍是旧格式时返回 null。 */
     val activeModelPath: String?
@@ -59,26 +68,61 @@ class ModelManager(private val context: Context) {
                 File(path).let { it.isFile && it.length() > 0 && it.canRead() }
         }
 
-    fun refresh() {
-        val path = prefs.getString(KEY_PATH, null)
-        if (path == null) {
-            _state.value = ModelState.NotInstalled
-            return
-        }
-        val file = File(path)
-        _state.value = when {
-            !path.endsWith(".litertlm", ignoreCase = true) ->
-                ModelState.Broken("旧版模型格式已不再支持，请重新安装 .litertlm")
-            !file.exists() -> ModelState.Broken("模型文件不存在: ${file.name}")
-            file.length() <= 0 -> ModelState.Broken("模型文件为空: ${file.name}")
-            !file.canRead() -> ModelState.Broken("模型文件不可读: ${file.name}")
-            else -> ModelState.Ready(file, file.length())
-        }
+    val activeModel: InstalledModel?
+        get() = activeModelPath?.let { InstalledModel(File(it)) }
+
+    init {
+        refresh()
     }
 
-    /** 从 SAF 选中的 Uri 复制模型文件到私有目录。 */
+    /** 重新扫描 models/ 目录，校正当前模型（失效时自动选第一个）。 */
+    fun refresh() {
+        val installed = modelsDir.listFiles()
+            ?.filter {
+                it.isFile &&
+                    it.name.endsWith(".litertlm", ignoreCase = true) &&
+                    it.length() > 0 &&
+                    it.canRead()
+            }
+            ?.sortedBy { it.name.lowercase() }
+            ?.map { InstalledModel(it) }
+            .orEmpty()
+
+        val savedPath = prefs.getString(KEY_PATH, null)
+        val validSaved = installed.firstOrNull { it.file.absolutePath == savedPath }?.file?.absolutePath
+        val activePath = validSaved ?: installed.firstOrNull()?.file?.absolutePath
+
+        if (activePath != savedPath) {
+            prefs.edit {
+                if (activePath == null) {
+                    remove(KEY_PATH)
+                    remove(KEY_NAME)
+                } else {
+                    putString(KEY_PATH, activePath)
+                    putString(KEY_NAME, File(activePath).name)
+                }
+            }
+        }
+
+        _models.value = installed
+    }
+
+    /** 切换当前模型（自动打标的默认选项）。 */
+    fun setActive(model: InstalledModel) {
+        if (!model.file.isFile || model.file.length() <= 0) {
+            refresh()
+            return
+        }
+        prefs.edit {
+            putString(KEY_PATH, model.file.absolutePath)
+            putString(KEY_NAME, model.file.name)
+        }
+        refresh()
+    }
+
+    /** 从 SAF 选中的 Uri 复制模型文件到私有目录（先写 .part，成功后原子改名）。 */
     suspend fun importFromUri(uri: Uri): Result<File> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val displayName = queryDisplayName(uri) ?: "model_${System.currentTimeMillis()}"
             if (SUPPORTED_EXTENSIONS.none { displayName.endsWith(it, ignoreCase = true) }) {
                 throw IllegalArgumentException(
@@ -86,11 +130,33 @@ class ModelManager(private val context: Context) {
                 )
             }
             val target = File(modelsDir, sanitizeName(displayName))
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(target).use { output -> input.copyTo(output, BUFFER_SIZE) }
-            } ?: throw IllegalStateException("无法读取所选文件")
+            val part = File(target.absolutePath + ".part")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(part).use { output ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read == -1) break
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                } ?: throw IllegalStateException("无法读取所选文件")
+                if (part.length() <= 0) throw IllegalStateException("导入得到空文件")
+                if (!part.renameTo(target)) {
+                    part.copyTo(target, overwrite = true)
+                    part.delete()
+                }
+            } catch (t: Throwable) {
+                part.delete()
+                throw t
+            }
             activate(target)
-            target
+            Result.success(target)
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Result.failure(t)
         }
     }
 
@@ -99,7 +165,7 @@ class ModelManager(private val context: Context) {
         url: String,
         onProgress: (Int) -> Unit = {},
     ): Result<File> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val fileName = fileNameFromUrl(url)
                 ?: throw IllegalArgumentException("无法从链接解析文件名，请检查 URL")
             if (SUPPORTED_EXTENSIONS.none { fileName.endsWith(it, ignoreCase = true) }) {
@@ -124,6 +190,7 @@ class ModelManager(private val context: Context) {
                         val buffer = ByteArray(BUFFER_SIZE)
                         var read = input.read(buffer)
                         while (read != -1) {
+                            currentCoroutineContext().ensureActive()
                             output.write(buffer, 0, read)
                             downloaded += read
                             if (total > 0) {
@@ -133,29 +200,51 @@ class ModelManager(private val context: Context) {
                         }
                     }
                 }
+                if (total > 0 && downloaded != total) {
+                    throw IllegalStateException("下载不完整：$downloaded / $total 字节")
+                }
                 if (!part.renameTo(target)) {
                     // 极端情况下 rename 失败：拷贝后删除 part
                     part.copyTo(target, overwrite = true)
                     part.delete()
                 }
+            } catch (t: Throwable) {
+                part.delete()
+                throw t
             } finally {
                 connection.disconnect()
             }
             if (target.length() <= 0) throw IllegalStateException("下载得到空文件")
             activate(target)
-            target
+            Result.success(target)
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Result.failure(t)
         }
     }
 
-    /** 删除已安装模型（含 .part 残留）。 */
-    fun deleteModel() {
-        val path = prefs.getString(KEY_PATH, null)
-        if (path != null) runCatching { File(path).delete() }
-        modelsDir.listFiles()?.forEach { f ->
-            if (f.name.endsWith(".part")) runCatching { f.delete() }
+    /** 删除指定模型；如果删的是当前模型，自动切换到另一个。 */
+    fun deleteModel(model: InstalledModel) {
+        runCatching { model.file.delete() }
+        // 同时清掉该模型首次加载生成的 XNNPACK 权重缓存（可能数 GB）
+        runCatching {
+            context.cacheDir.listFiles()
+                ?.filter { it.name.startsWith(model.file.name) }
+                ?.forEach { it.delete() }
         }
-        prefs.edit { remove(KEY_PATH); remove(KEY_NAME) }
+        if (prefs.getString(KEY_PATH, null) == model.file.absolutePath) {
+            prefs.edit {
+                remove(KEY_PATH)
+                remove(KEY_NAME)
+            }
+        }
         refresh()
+    }
+
+    /** 删除当前模型（兼容旧入口）。 */
+    fun deleteModel() {
+        val active = activeModel
+        if (active != null) deleteModel(active) else refresh()
     }
 
     private fun activate(file: File) {

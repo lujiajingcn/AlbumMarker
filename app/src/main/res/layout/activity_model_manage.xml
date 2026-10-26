@@ -54,6 +54,29 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- 已安装模型列表 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/model_installed_title"
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+        <LinearLayout
+            android:id="@+id/llModels"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/model_installed_hint"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?android:attr/textColorSecondary" />
+
         <!-- 从文件导入 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -161,17 +184,6 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 删除 -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnDeleteModel"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/model_delete"
-            android:textColor="#B3261E"
-            app:icon="@drawable/ic_delete"
-            app:iconTint="#B3261E" />
     </LinearLayout>
     </ScrollView>
 

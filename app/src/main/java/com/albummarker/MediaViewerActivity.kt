@@ -31,6 +31,7 @@ import com.albummarker.data.TagParser
 import com.albummarker.data.model.AutoTagEngine
 import com.albummarker.databinding.ActivityMediaViewerBinding
 import com.albummarker.ui.MediaPagerAdapter
+import com.albummarker.ui.ModelPickerDialog
 import com.albummarker.ui.TagTreeAdapter
 import com.albummarker.ui.ViewerViewModel
 import com.google.android.material.chip.Chip
@@ -215,33 +216,39 @@ class MediaViewerActivity : AppCompatActivity() {
                 )
                 setTextColor(ContextCompat.getColor(this@MediaViewerActivity, android.R.color.white))
                 closeIcon?.setTint(ContextCompat.getColor(this@MediaViewerActivity, android.R.color.white))
-                setOnCloseIconClickListener { removeTag(entry.tag) }
+                setOnCloseIconClickListener { removeTag(entry) }
             }
             binding.chipGroupTags.addView(chip)
         }
     }
 
-    private fun removeTag(tag: String) {
+    private fun removeTag(entry: TagEntry) {
         val hash = currentHash ?: return
-        Graph.tagStore.removeTag(hash, tag)
-        updateChips()
-        Snackbar.make(binding.root, getString(R.string.tag_removed, tag), Snackbar.LENGTH_LONG)
-            .setAction(R.string.undo) {
-                lifecycleScope.launch {
-                    withContext(Dispatchers.IO) {
-                        // 必须带上 media：TagStore.removeTag 在标签清空时删掉了 media_tags 行，
-                        // 不补回来的话这个标签在首页网格与标签搜索里都会「查无此项」
-                        Graph.tagStore.addTags(
-                            hash,
-                            listOf(tag),
-                            TagEntry.SOURCE_MANUAL,
-                            current,
-                        )
-                    }
-                    updateChips()
-                }
+        // 捕获删除时的媒体与来源：用户可能在 Snackbar 显示期间滑到另一张照片。
+        val media = current ?: return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                Graph.tagStore.removeTag(hash, entry.tag)
             }
-            .show()
+            updateChips()
+            Snackbar.make(binding.root, getString(R.string.tag_removed, entry.tag), Snackbar.LENGTH_LONG)
+                .setAction(R.string.undo) {
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) {
+                            // 必须带上捕获的 media/source；否则跨页 Undo 会把标签写到当前照片，
+                            // 且自动/启发式标签会被错误改成 manual。
+                            Graph.tagStore.addTags(
+                                hash,
+                                listOf(entry.tag),
+                                entry.source,
+                                media,
+                            )
+                        }
+                        updateChips()
+                    }
+                }
+                .show()
+        }
     }
 
     // ---- 手动添加标签 ----
@@ -391,8 +398,9 @@ class MediaViewerActivity : AppCompatActivity() {
 
     private fun onAutoTagClicked() {
         val media = current ?: return
-        val modelPath = Graph.modelManager.activeModelPath
-        if (modelPath == null) {
+        Graph.modelManager.refresh()
+        val models = Graph.modelManager.models.value
+        if (models.isEmpty()) {
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.auto_tag_no_model_title)
                 .setMessage(R.string.auto_tag_no_model_msg)
@@ -405,8 +413,19 @@ class MediaViewerActivity : AppCompatActivity() {
                 }
                 .setNeutralButton(R.string.auto_tag_cancel, null)
                 .show()
+        } else if (models.size == 1) {
+            val model = models.first()
+            Graph.modelManager.setActive(model)
+            viewModel.runAutoTag(media, useQwen = true, modelPath = model.file.absolutePath)
         } else {
-            viewModel.runAutoTag(media, useQwen = true, modelPath = modelPath)
+            ModelPickerDialog.show(
+                this,
+                models,
+                Graph.modelManager.activeModelPath,
+            ) { model ->
+                Graph.modelManager.setActive(model)
+                viewModel.runAutoTag(media, useQwen = true, modelPath = model.file.absolutePath)
+            }
         }
     }
 
@@ -448,10 +467,12 @@ class MediaViewerActivity : AppCompatActivity() {
         val chipGroup =
             dialogView.findViewById<com.google.android.material.chip.ChipGroup>(R.id.chipGroupSuggestions)
         val sourceText = dialogView.findViewById<android.widget.TextView>(R.id.tvSuggestSource)
-        sourceText.text = getString(
-            if (engineId == AutoTagEngine.ID_QWEN) R.string.suggest_from_qwen
-            else R.string.suggest_from_heuristic
-        )
+        sourceText.text = if (engineId == AutoTagEngine.ID_QWEN) {
+            val modelName = Graph.modelManager.activeModel?.displayName ?: "Qwen"
+            getString(R.string.suggest_from_model, modelName)
+        } else {
+            getString(R.string.suggest_from_heuristic)
+        }
         tags.forEach { tag ->
             chipGroup.addView(
                 Chip(this).apply {
@@ -580,8 +601,10 @@ class MediaViewerActivity : AppCompatActivity() {
                     TagEmbedder.embed(this@MediaViewerActivity, media.uri, tags)
                 }
                 // 文件字节已变 -> 哈希变 -> 标签行必须搬家，否则 chips 消失
-                Graph.tagStore.migrateHash(oldHash, result.newHash, result.newSize)
-                Graph.tagStore.invalidateHashCache(media.uri.toString())
+                withContext(Dispatchers.IO) {
+                    Graph.tagStore.migrateHash(oldHash, result.newHash, result.newSize)
+                    Graph.tagStore.invalidateHashCache(media.uri.toString())
+                }
                 // 同步内存态：当前媒体、MediaBus（网格/再次进入查看器都读它）
                 val fresh = media.copy(sizeBytes = result.newSize)
                 current = fresh

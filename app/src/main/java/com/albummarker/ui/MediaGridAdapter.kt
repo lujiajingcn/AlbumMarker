@@ -60,6 +60,9 @@ class MediaGridAdapter(
                     // View 可能已被复用：仅当 tag 仍对得上时才落图
                     if (binding.ivThumb.tag == media.uri.toString() && bmp != null) {
                         binding.ivThumb.setImageBitmap(bmp)
+                    } else {
+                        // 已经不属于这个 item 的缩略图要立即释放，避免快速滚动时堆积
+                        bmp?.recycle()
                     }
                 }
             } else {
@@ -70,9 +73,15 @@ class MediaGridAdapter(
             }
             bindTags(item.tags)
             binding.ivSelection.isVisible = item.selected
-            binding.root.setOnClickListener { onClick(media, bindingAdapterPosition) }
+            binding.root.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) onClick(media, position)
+            }
             binding.root.setOnLongClickListener {
-                onLongClick(media, bindingAdapterPosition)
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    onLongClick(media, position)
+                }
                 true
             }
         }

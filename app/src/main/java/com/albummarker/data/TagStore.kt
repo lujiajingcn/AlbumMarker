@@ -68,6 +68,9 @@ class TagStore(context: Context) :
      */
     private val uriByHash = mutableMapOf<String, String>()
 
+    /** 保护 uriByHash 与 _tagsFlow 的读改写，避免批量写与查看器同时更新时丢标签。 */
+    private val mapLock = Any()
+
     /** 应用启动时调用一次，把全量标签读进内存。 */
     fun loadAll() {
         val map = mutableMapOf<String, MutableList<TagEntry>>()
@@ -95,9 +98,11 @@ class TagStore(context: Context) :
                 if (!c.isNull(iUri)) uris.putIfAbsent(hash, c.getString(iUri))
             }
         }
-        uriByHash.clear()
-        uriByHash.putAll(uris)
-        _tagsFlow.value = map
+        synchronized(mapLock) {
+            uriByHash.clear()
+            uriByHash.putAll(uris)
+            _tagsFlow.value = map
+        }
     }
 
     fun tagsFor(hash: String): List<TagEntry> = _tagsFlow.value[hash].orEmpty()
@@ -149,7 +154,9 @@ class TagStore(context: Context) :
             db.endTransaction()
         }
         if (inserted > 0) refreshHash(hash)
-        if (media != null) uriByHash[hash] = media.uri.toString()
+        if (media != null) {
+            synchronized(mapLock) { uriByHash[hash] = media.uri.toString() }
+        }
         return inserted
     }
 
@@ -162,7 +169,7 @@ class TagStore(context: Context) :
         ).use { it.moveToFirst() && it.getInt(0) > 0 }
         if (!remaining) {
             db.delete(TABLE_MEDIA, "hash = ?", arrayOf(hash))
-            uriByHash.remove(hash)
+            synchronized(mapLock) { uriByHash.remove(hash) }
         }
         refreshHash(hash)
     }
@@ -181,10 +188,12 @@ class TagStore(context: Context) :
                 list.add(TagEntry(c.getString(iTag), c.getString(iSource), c.getLong(iCreated)))
             }
         }
-        val current = _tagsFlow.value
-        val mutable = current.toMutableMap()
-        if (list.isEmpty()) mutable.remove(hash) else mutable[hash] = list
-        _tagsFlow.value = mutable
+        synchronized(mapLock) {
+            val current = _tagsFlow.value
+            val mutable = current.toMutableMap()
+            if (list.isEmpty()) mutable.remove(hash) else mutable[hash] = list
+            _tagsFlow.value = mutable
+        }
     }
 
     // ---- hash_cache：避免对大视频反复做全量 SHA-256 ----
@@ -202,7 +211,14 @@ class TagStore(context: Context) :
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.execSQL("UPDATE OR IGNORE $TABLE_TAGS SET hash=? WHERE hash=?", arrayOf(newHash, oldHash))
+            // 先插入到新哈希（新哈希已有同名标签时保留原行），再删除旧哈希的所有行。
+            // 直接用 UPDATE OR IGNORE 会在冲突时把旧行留在旧哈希下，形成幽灵标签。
+            db.execSQL(
+                "INSERT OR IGNORE INTO $TABLE_TAGS (hash, tag, source, created_at) " +
+                    "SELECT ?, tag, source, created_at FROM $TABLE_TAGS WHERE hash = ?",
+                arrayOf(newHash, oldHash)
+            )
+            db.execSQL("DELETE FROM $TABLE_TAGS WHERE hash = ?", arrayOf(oldHash))
             db.execSQL("UPDATE OR REPLACE $TABLE_MEDIA SET hash=? WHERE hash=?", arrayOf(newHash, oldHash))
             db.execSQL("UPDATE OR REPLACE $TABLE_HASH_CACHE SET hash=? WHERE hash=?", arrayOf(newHash, oldHash))
             if (newSize != null) {
@@ -215,7 +231,9 @@ class TagStore(context: Context) :
         refreshHash(oldHash)
         refreshHash(newHash)
         // 内存映射跟着搬家：标签行换到新哈希，Uri 归属不变
-        uriByHash.remove(oldHash)?.let { uriByHash[newHash] = it }
+        synchronized(mapLock) {
+            uriByHash.remove(oldHash)?.let { uriByHash[newHash] = it }
+        }
     }
 
     /** 使某个 Uri 的哈希缓存失效（文件内容被本应用改写后调用，下次查询重新计算）。 */
@@ -290,8 +308,10 @@ class TagStore(context: Context) :
      */
     fun tagsByUri(): Map<String, List<TagEntry>> {
         val out = mutableMapOf<String, MutableList<TagEntry>>()
-        for ((hash, entries) in _tagsFlow.value) {
-            val uri = uriByHash[hash] ?: continue
+        val tagsSnapshot = _tagsFlow.value
+        val uriSnapshot = synchronized(mapLock) { uriByHash.toMap() }
+        for ((hash, entries) in tagsSnapshot) {
+            val uri = uriSnapshot[hash] ?: continue
             out.getOrPut(uri) { mutableListOf() }.addAll(entries)
         }
         return out
@@ -309,6 +329,8 @@ class TagStore(context: Context) :
 
         val result = mutableSetOf<String>()
         val db = readableDatabase
+        val memoryTags = _tagsFlow.value
+        val memoryUris = synchronized(mapLock) { uriByHash.toMap() }
         for (token in tokens) {
             val escaped = token
                 .replace("\\", "\\\\")
@@ -321,6 +343,13 @@ class TagStore(context: Context) :
                 arrayOf("%$escaped%"),
             ).use { c ->
                 while (c.moveToNext()) result += c.getString(0)
+            }
+            // 有些历史标签没有 media_tags 行（loadAll 的 LEFT JOIN 注释），
+            // 这些标签也要能在内存映射里被搜到。
+            for ((hash, entries) in memoryTags) {
+                if (entries.any { it.tag.contains(token, ignoreCase = true) }) {
+                    memoryUris[hash]?.let { result += it }
+                }
             }
         }
         return result

@@ -67,26 +67,30 @@ class HeuristicTagEngine : AutoTagEngine {
             val h = 32
             val small = if (bmp.width <= w && bmp.height <= h) bmp
             else Bitmap.createScaledBitmap(bmp, w, h, true)
-            var rSum = 0L
-            var gSum = 0L
-            var bSum = 0L
-            var sSum = 0.0
-            val pixels = IntArray(w * h)
-            small.getPixels(pixels, 0, w, 0, 0, w, h)
-            for (p in pixels) {
-                rSum += Color.red(p)
-                gSum += Color.green(p)
-                bSum += Color.blue(p)
-                sSum += saturationOf(Color.red(p), Color.green(p), Color.blue(p))
+            try {
+                var rSum = 0L
+                var gSum = 0L
+                var bSum = 0L
+                var sSum = 0.0
+                val pixels = IntArray(w * h)
+                small.getPixels(pixels, 0, w, 0, 0, w, h)
+                for (p in pixels) {
+                    rSum += Color.red(p)
+                    gSum += Color.green(p)
+                    bSum += Color.blue(p)
+                    sSum += saturationOf(Color.red(p), Color.green(p), Color.blue(p))
+                }
+                val n = (w * h).toDouble()
+                return BitmapStats(
+                    avgR = (rSum / n).toInt(),
+                    avgG = (gSum / n).toInt(),
+                    avgB = (bSum / n).toInt(),
+                    luminance = luminanceOf(rSum / n, gSum / n, bSum / n),
+                    saturation = sSum / n,
+                )
+            } finally {
+                if (small !== bmp) runCatching { small.recycle() }
             }
-            val n = (w * h).toDouble()
-            return BitmapStats(
-                avgR = (rSum / n).toInt(),
-                avgG = (gSum / n).toInt(),
-                avgB = (bSum / n).toInt(),
-                luminance = luminanceOf(rSum / n, gSum / n, bSum / n),
-                saturation = sSum / n,
-            )
         }
 
         /** HSV 饱和度（0..1）。 */

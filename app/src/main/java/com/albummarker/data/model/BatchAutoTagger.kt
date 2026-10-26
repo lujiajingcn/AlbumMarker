@@ -1,6 +1,7 @@
 package com.albummarker.data.model
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.util.Log
 import com.albummarker.data.MediaBitmaps
 import com.albummarker.data.MediaHasher
@@ -8,6 +9,7 @@ import com.albummarker.data.MediaItem
 import com.albummarker.data.TagEntry
 import com.albummarker.data.TagParser
 import com.albummarker.data.TagStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -51,8 +53,10 @@ object BatchAutoTagger {
         var added = 0
         media.forEachIndexed { index, item ->
             withContext(Dispatchers.Main) { onProgress(index + 1, media.size) }
+            var bitmaps: List<Bitmap> = emptyList()
             try {
                 val input = buildInput(context, item)
+                bitmaps = input.bitmaps
                 if (input.bitmaps.isEmpty()) {
                     throw IllegalStateException("无法从该媒体提取画面帧")
                 }
@@ -69,10 +73,14 @@ object BatchAutoTagger {
                     }
                 }
                 ok++
-            } catch (e: Exception) {
-                // 单张失败不影响其余：文件可能已被移动/删除
-                Log.e(TAG, "batch autoTag failed: ${item.displayName}", e)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (t: Throwable) {
+                // 单张失败不影响其余：文件可能已被移动/删除；OOM 也只计失败，不拖垮整批。
+                Log.e(TAG, "batch autoTag failed: ${item.displayName}", t)
                 fail++
+            } finally {
+                bitmaps.forEach { runCatching { it.recycle() } }
             }
         }
         return Result(ok, fail, added)

@@ -37,13 +37,16 @@ import com.albummarker.data.TaggedMedia
 import com.albummarker.data.model.AutoTagEngine
 import com.albummarker.data.model.BatchAutoTagger
 import com.albummarker.data.model.HeuristicTagEngine
+import com.albummarker.data.model.ModelManager
 import com.albummarker.data.model.QwenLlmEngine
 import com.albummarker.databinding.ActivityMainBinding
 import com.albummarker.ui.MediaGridAdapter
+import com.albummarker.ui.ModelPickerDialog
 import com.albummarker.ui.TagTreeAdapter
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -163,6 +166,16 @@ class MainActivity : AppCompatActivity() {
         })
         onBackPressedDispatcher.addCallback(this, searchBackCallback)
         onBackPressedDispatcher.addCallback(this, selectionBackCallback)
+
+        // 标签在后台加载（见 Graph.init），加载完成后同步刷新网格浮层。
+        lifecycleScope.launch {
+            Graph.tagStore.tagsFlow.collect {
+                if (showTags) {
+                    tagsByUri = Graph.tagStore.tagsByUri()
+                    if (::adapter.isInitialized && visibleItems.isNotEmpty()) submitGrid()
+                }
+            }
+        }
 
         adapter = MediaGridAdapter(
             onClick = { item, position ->
@@ -528,21 +541,31 @@ class MainActivity : AppCompatActivity() {
     /** 批量「自动添加标签」：逐张跑引擎，标签直接写入（不弹建议框）。 */
     private fun onBatchAutoTag() {
         val targets = selectedOrHint() ?: return
-        val modelPath = Graph.modelManager.activeModelPath
-        if (modelPath == null) {
+        Graph.modelManager.refresh()
+        val models = Graph.modelManager.models.value
+        if (models.isEmpty()) {
             // 没装模型：直接用启发式引擎，无需确认
             runBatchAutoTag(targets, useQwen = false, modelPath = null)
             return
         }
-        // 装了 Qwen：逐张推理很慢，先让用户确认
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.btn_auto_tag)
-            .setMessage(getString(R.string.batch_auto_confirm, targets.size))
-            .setNegativeButton(R.string.auto_tag_cancel, null)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                runBatchAutoTag(targets, useQwen = true, modelPath = modelPath)
-            }
-            .show()
+        val proceed: (ModelManager.InstalledModel) -> Unit = { model ->
+            Graph.modelManager.setActive(model)
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.btn_auto_tag)
+                .setMessage(
+                    getString(R.string.batch_auto_confirm_model, model.displayName, targets.size)
+                )
+                .setNegativeButton(R.string.auto_tag_cancel, null)
+                .setPositiveButton(R.string.confirm) { _, _ ->
+                    runBatchAutoTag(targets, useQwen = true, modelPath = model.file.absolutePath)
+                }
+                .show()
+        }
+        if (models.size == 1) {
+            proceed(models.first())
+        } else {
+            ModelPickerDialog.show(this, models, Graph.modelManager.activeModelPath, proceed)
+        }
     }
 
     private fun runBatchAutoTag(
@@ -562,9 +585,15 @@ class MainActivity : AppCompatActivity() {
             try {
                 // 引擎在整个批次内复用：Qwen 加载模型很贵，不能每张都重来
                 engine = if (useQwen && modelPath != null) {
-                    val qwen = QwenLlmEngine(this@MainActivity)
-                    withContext(Dispatchers.IO) { qwen.prepare(modelPath) }
-                    qwen
+                    val qwen = QwenLlmEngine(this@MainActivity.applicationContext)
+                    try {
+                        withContext(Dispatchers.IO) { qwen.prepare(modelPath) }
+                        qwen
+                    } catch (t: Throwable) {
+                        // prepare 失败时 engine 还没赋值，必须在这里释放局部实例
+                        runCatching { withContext(Dispatchers.IO) { qwen.release() } }
+                        throw t
+                    }
                 } else {
                     HeuristicTagEngine()
                 }
@@ -580,11 +609,14 @@ class MainActivity : AppCompatActivity() {
                 ok = result.succeeded
                 fail = result.failed
                 added = result.added
-            } catch (e: Exception) {
-                Log.e("AlbumMarker", "batch autoTag failed", e)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (t: Throwable) {
+                Log.e("AlbumMarker", "batch autoTag failed", t)
                 fail = targets.size
             } finally {
-                engine?.release()
+                // release 内部可能等待推理锁，不能阻塞主线程
+                runCatching { withContext(Dispatchers.IO) { engine?.release() } }
                 dialog.dismiss()
             }
             afterBatchDone(added, fail, ok)
@@ -665,15 +697,21 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
             pendingBatch = candidates
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11+ 改写非本应用创建的媒体文件，必须走系统授权对话框
-                val request = MediaStore.createWriteRequest(
-                    contentResolver,
-                    candidates.map { Uri.parse(it.uri) }
-                )
-                batchWriteLauncher.launch(IntentSenderRequest.Builder(request).build())
-            } else {
-                legacyWriteLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ 改写非本应用创建的媒体文件，必须走系统授权对话框
+                    val request = MediaStore.createWriteRequest(
+                        contentResolver,
+                        candidates.map { Uri.parse(it.uri) }
+                    )
+                    batchWriteLauncher.launch(IntentSenderRequest.Builder(request).build())
+                } else {
+                    legacyWriteLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+            } catch (e: Exception) {
+                pendingBatch = null
+                Log.e("AlbumMarker", "create write request failed", e)
+                toast(getString(R.string.embed_failed, e.message ?: e.javaClass.simpleName))
             }
         }
     }
@@ -694,14 +732,20 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.embed_batch_progress, done, candidates.size)
                 )
                 try {
-                    val result = withContext(Dispatchers.IO) {
-                        TagEmbedder.embed(this@MainActivity, Uri.parse(item.uri), item.tags)
+                    withContext(Dispatchers.IO) {
+                        val result = TagEmbedder.embed(
+                            this@MainActivity,
+                            Uri.parse(item.uri),
+                            item.tags,
+                        )
+                        Graph.tagStore.migrateHash(item.hash, result.newHash, result.newSize)
+                        Graph.tagStore.invalidateHashCache(item.uri)
                     }
-                    Graph.tagStore.migrateHash(item.hash, result.newHash, result.newSize)
-                    Graph.tagStore.invalidateHashCache(item.uri)
                     ok++
-                } catch (e: Exception) {
-                    Log.e("AlbumMarker", "batch embed failed: ${item.displayName}", e)
+                } catch (cancel: CancellationException) {
+                    throw cancel
+                } catch (t: Throwable) {
+                    Log.e("AlbumMarker", "batch embed failed: ${item.displayName}", t)
                     fail++
                 }
             }

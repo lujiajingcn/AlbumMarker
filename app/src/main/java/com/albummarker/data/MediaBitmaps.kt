@@ -73,12 +73,12 @@ object MediaBitmaps {
         }.getOrNull()
     }
 
-    /** 视频按位置抽取关键帧（默认 15% / 50% / 85% 三帧）。 */
+    /** 视频按位置抽取关键帧（默认 1 帧；Qwen/启发式目前都只消费首帧）。 */
     suspend fun framesForVideo(
         context: Context,
         item: MediaItem,
         maxDim: Int = 512,
-        count: Int = 3,
+        count: Int = 1,
     ): List<Bitmap> = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
@@ -154,11 +154,8 @@ object MediaBitmaps {
 
     fun calculateInSampleSize(width: Int, height: Int, maxDim: Int): Int {
         var sample = 1
-        var w = width
-        var h = height
-        while (w / 2 >= maxDim && h / 2 >= maxDim) {
-            w /= 2
-            h /= 2
+        // 按最长边降采样；旧逻辑要求宽高同时减半，超宽全景图会按原宽解码。
+        while (maxOf(width / sample, height / sample) > maxDim) {
             sample *= 2
         }
         return sample
@@ -177,7 +174,14 @@ object MediaBitmaps {
         val max = maxOf(w, h)
         if (max <= maxDim) return src
         val scale = maxDim.toFloat() / max
-        return Bitmap.createScaledBitmap(src, (w * scale).toInt().coerceAtLeast(1), (h * scale).toInt().coerceAtLeast(1), true)
+        val scaled = Bitmap.createScaledBitmap(
+            src,
+            (w * scale).toInt().coerceAtLeast(1),
+            (h * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+        if (scaled !== src) src.recycle()
+        return scaled
     }
 }
 

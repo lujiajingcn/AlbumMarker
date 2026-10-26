@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup（API 23–30）：不备份大模型文件，只保留数据库/偏好设置。 -->
+<full-backup-content>
+    <exclude domain="file" path="models" />
+</full-backup-content>

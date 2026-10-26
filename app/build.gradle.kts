@@ -14,8 +14,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        // MediaPipe tasks-genai ships native libs for 4 ABIs (~110MB raw).
-        // Keep only the two we actually run on: real devices (arm64) + emulator (x86_64).
+        // LiteRT-LM 的 JNI 只提供 arm64-v8a / x86_64，保留真机与模拟器两种 ABI。
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }

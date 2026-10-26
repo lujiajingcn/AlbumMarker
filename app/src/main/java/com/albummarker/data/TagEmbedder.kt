@@ -274,6 +274,11 @@ object TagEmbedder {
     suspend fun embed(context: Context, uri: Uri, tags: List<String>): Result = withContext(Dispatchers.IO) {
         require(tags.isNotEmpty()) { "tags 不能为空" }
         val resolver = context.contentResolver
+        // 先查大小再读文件：避免超大文件在 readBytes() 阶段就 OOM。
+        val declaredSize = queryFileSize(resolver, uri)
+        if (declaredSize != null && declaredSize > MAX_FILE_BYTES) {
+            throw IOException("文件过大（>128MB），暂不支持写入标签")
+        }
         val original = resolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IOException("无法读取文件: $uri")
         if (original.size > MAX_FILE_BYTES) {
@@ -288,41 +293,58 @@ object TagEmbedder {
         val merged = merge(existingItems, tags)
         val description = merged.joinToString("、")
         val newPayload = spliceXmp(existingPayload, merged, description)
-        if (newPayload.length + 2 > 0xFFFF) {
+        val payloadBytes = newPayload.toByteArray(Charsets.UTF_8)
+        // XMP APP1 段按字节计算，不能按字符数判断（中文 UTF-8 每字 3 字节）。
+        if (payloadBytes.size + 2 > 0xFFFF) {
             throw IOException("文件的 XMP 数据过大（段将超过 64KB），暂不支持追加标签")
         }
-        val newBytes = insertOrReplaceXmp(original, newPayload.toByteArray(Charsets.UTF_8))
+        val newBytes = insertOrReplaceXmp(original, payloadBytes)
         val newHash = MediaHasher.hashBytes(newBytes)
         Log.d(TAG, "embed: $uri tags=${tags.size} merged=${merged.size} " +
             "bytes ${original.size}->${newBytes.size} newHash=${newHash.take(16)}")
 
-        resolver.openOutputStream(uri, "w")?.use { it.write(newBytes) }
-            ?: throw IOException("无法写入文件: $uri")
+        // 原地写 JPEG 有截断风险：任何写入/校验失败都尝试把原字节写回去，
+        // 避免留下「文件已损坏但标签还在旧哈希」的不可恢复状态。
+        var writeAttempted = false
+        try {
+            writeAttempted = true
+            resolver.openOutputStream(uri, "w")?.use { it.write(newBytes) }
+                ?: throw IOException("无法写入文件: $uri")
 
-        // 回读校验：哈希迁移的正确性完全依赖「落盘内容 == 我们以为的内容」。
-        // 但平台存在已知 quirk：写完立刻 openInputStream 可能抛 IOException
-        // （如 MediaProvider redaction 一次性授权被消耗后的瞬时不可读）。
-        // 此时不能直接失败——文件已落盘，中止会让标签行留在旧哈希下与文件脱步；
-        // 退化为文件大小校验（能查询到时），大小一致即认为写入完整。
-        val writtenBack = try {
-            resolver.openInputStream(uri)?.use { it.readBytes() }
-        } catch (e: Exception) {
-            // 回读可能抛 IOException，也可能被 MediaProvider redaction 包成
-            // IllegalStateException("Failed to redact ...")——一律退化为大小校验。
-            Log.w(TAG, "embed: 回读失败，退化为大小校验: ${e.message}")
-            null
-        }
-        if (writtenBack != null) {
-            val actualHash = MediaHasher.hashBytes(writtenBack)
-            if (actualHash != newHash) {
-                throw IOException("写入校验失败（回读哈希不一致）")
+            // 回读校验：哈希迁移的正确性完全依赖「落盘内容 == 我们以为的内容」。
+            // 但平台存在已知 quirk：写完立刻 openInputStream 可能抛 IOException
+            // （如 MediaProvider redaction 一次性授权被消耗后的瞬时不可读）。
+            // 此时不能直接失败——文件已落盘，中止会让标签行留在旧哈希下与文件脱步；
+            // 退化为文件大小校验（能查询到时），大小一致即认为写入完整。
+            val writtenBack = try {
+                resolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                // 回读可能抛 IOException，也可能被 MediaProvider redaction 包成
+                // IllegalStateException("Failed to redact ...")——一律退化为大小校验。
+                Log.w(TAG, "embed: 回读失败，退化为大小校验: ${e.message}")
+                null
             }
-        } else {
-            val sizeNow = queryFileSize(resolver, uri)
-            if (sizeNow != null && sizeNow != newBytes.size.toLong()) {
-                throw IOException("写入校验失败（文件大小 $sizeNow != ${newBytes.size}）")
+            if (writtenBack != null) {
+                val actualHash = MediaHasher.hashBytes(writtenBack)
+                if (actualHash != newHash) {
+                    throw IOException("写入校验失败（回读哈希不一致）")
+                }
+            } else {
+                val sizeNow = queryFileSize(resolver, uri)
+                if (sizeNow != null && sizeNow != newBytes.size.toLong()) {
+                    throw IOException("写入校验失败（文件大小 $sizeNow != ${newBytes.size}）")
+                }
+                Log.w(TAG, "embed: 回读不可用且大小校验通过（$sizeNow），按内存哈希迁移")
             }
-            Log.w(TAG, "embed: 回读不可用且大小校验通过（$sizeNow），按内存哈希迁移")
+        } catch (t: Throwable) {
+            if (writeAttempted) {
+                runCatching {
+                    resolver.openOutputStream(uri, "w")?.use { it.write(original) }
+                }.onFailure { restoreError ->
+                    Log.e(TAG, "embed: 回滚原文件失败: $uri", restoreError)
+                }
+            }
+            throw t
         }
         Result(newHash, merged, newBytes.size.toLong())
     }

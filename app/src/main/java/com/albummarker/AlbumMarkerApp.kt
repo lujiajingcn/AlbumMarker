@@ -5,6 +5,10 @@ import android.app.Application
 import android.content.Context
 import com.albummarker.data.TagStore
 import com.albummarker.data.model.ModelManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class AlbumMarkerApp : Application() {
 
@@ -25,7 +29,11 @@ object Graph {
 
     fun init(context: Context) {
         if (::tagStore.isInitialized) return
-        tagStore = TagStore(context.applicationContext).also { it.loadAll() }
+        tagStore = TagStore(context.applicationContext)
+        // 全表标签读取不阻塞 Application.onCreate / 首帧；UI 通过 tagsFlow 订阅结果。
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            tagStore.loadAll()
+        }
         modelManager = ModelManager(context.applicationContext).also { it.refresh() }
     }
 }

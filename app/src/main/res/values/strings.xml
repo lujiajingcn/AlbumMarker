@@ -24,7 +24,7 @@
     <string name="batch_tag_none_added">所选文件都已有这些标签</string>
     <string name="batch_auto_progress">正在分析 %1$d / %2$d …</string>
     <string name="batch_auto_summary">完成：成功 %1$d 个，失败 %2$d 个</string>
-    <string name="batch_auto_confirm">将对 %1$d 个文件逐个运行模型（每张约 10–60 秒，耗时较长）。确定继续？</string>
+    <string name="batch_auto_confirm_model">将使用「%1$s」对 %2$d 个文件逐个运行模型（耗时较长）。确定继续？</string>
     <string name="batch_tag_confirm">确定</string>
 
     <!-- 权限 -->
@@ -63,24 +63,28 @@
 
     <!-- 自动打标 -->
     <string name="auto_tag_analyzing">正在分析当前媒体…</string>
-    <string name="auto_tag_analyzing_qwen">Qwen 模型首次加载中（约 10–60 秒，同一次查看器内后续会复用）…</string>
+    <string name="auto_tag_analyzing_qwen">Qwen 模型首次加载中（约 10–60 秒，2B 更久；同一次查看器内后续会复用）…</string>
     <string name="auto_tag_no_model_title">尚未安装 Qwen 模型</string>
     <string name="auto_tag_no_model_msg">自动打标需要安装 Qwen3.5-0.8B 的 LiteRT-LM 视觉模型（.litertlm，推荐 VL 版，约 1.3 GB）。\n你也可以先用「启发式标签」体验（基于颜色、亮度、EXIF 等本地特征，无需模型）。</string>
     <string name="auto_tag_install">去安装模型</string>
     <string name="auto_tag_heuristic">使用启发式标签</string>
     <string name="auto_tag_cancel">取消</string>
     <string name="suggest_title">建议标签（可勾选）</string>
-    <string name="suggest_from_qwen">来源：Qwen3.5-0.8B-VL（LiteRT-LM 本地模型）</string>
+    <string name="suggest_from_model">来源：%1$s（LiteRT-LM 本地模型）</string>
     <string name="suggest_from_heuristic">来源：启发式分析（未安装模型）</string>
     <string name="suggest_add_selected">添加所选（%1$d）</string>
     <string name="suggest_empty">模型没有返回有效标签，请重试或改用启发式标签</string>
     <string name="auto_tag_failed">自动打标失败：%1$s</string>
+    <string name="auto_tag_oom">内存不足，建议改用较小的模型（如 Qwen3.5-0.8B-VL）后重试</string>
 
     <!-- 模型管理 -->
     <string name="model_status_title">模型状态</string>
     <string name="model_status_none">未安装模型</string>
-    <string name="model_status_ready">已就绪：%1$s（%2$s）</string>
-    <string name="model_status_broken">模型异常：%1$s</string>
+    <string name="model_status_count">已安装 %1$d 个模型，当前：%2$s</string>
+    <string name="model_installed_title">已安装模型</string>
+    <string name="model_installed_hint">点按模型切换自动打标默认使用的模型；可同时保留多个，自动打标时还会再让你选择。</string>
+    <string name="model_current">当前</string>
+    <string name="model_choose_title">选择自动打标模型</string>
     <string name="model_import_file">从文件导入</string>
     <string name="model_import_hint">通过系统文件选择器导入 .litertlm 模型文件</string>
     <string name="model_download">从网址下载</string>
@@ -88,13 +92,14 @@
     <string name="model_download_progress">下载中 %1$d%%</string>
     <string name="model_importing">正在导入模型…</string>
     <string name="model_delete">删除模型</string>
-    <string name="model_delete_confirm">确定删除已安装的模型文件？删除后自动打标将不可用。</string>
+    <string name="model_delete_named_msg">确定删除「%1$s」？删除后不可用于自动打标。</string>
     <string name="model_deleted">模型已删除</string>
+    <string name="model_switched">已切换到：%1$s</string>
     <string name="model_imported">模型已安装：%1$s</string>
     <string name="model_import_failed">导入失败：%1$s</string>
     <string name="model_download_failed">下载失败：%1$s</string>
     <string name="model_help_title">关于模型</string>
-    <string name="model_help">自动打标使用 LiteRT-LM 在设备本地运行 Qwen3.5-0.8B-VL，不会上传任何照片或视频。\n\n推荐模型：Qwen3.5-0.8B-VL_int8.litertlm（约 1.3 GB，带视觉编码器，能看图打标；纯文本版 Qwen3.5-0.8B_int8.litertlm 看不到照片，不要用）。\n下载：https://huggingface.co/litert-community/Qwen3.5-0.8B\n国内镜像：https://hf-mirror.com/litert-community/Qwen3.5-0.8B\n\n安装方式：\n1. 下载 .litertlm 文件（或复制直链）；\n2. 在本页「从文件导入」，或填写直链「从网址下载」。\n\n模型保存在应用私有目录，卸载应用即删除。未安装模型时，「自动添加标签」会退化为启发式标签（颜色 / 亮度 / 横竖版 / EXIF / 时长等本地特征）。</string>
+    <string name="model_help">自动打标使用 LiteRT-LM 在设备本地运行 Qwen 视觉模型，不会上传任何照片或视频。\n\n可同时安装多个模型，在「自动添加标签」时选择：\n• Qwen3.5-0.8B-VL_int8.litertlm（约 1.3 GB）——速度快、内存占用低，日常首选；\n• Qwen3.5-2B-VL_int8.litertlm（约 3.15 GB）——识别 / OCR 更强，但 8GB 机型较慢，且可能被系统回收。\n\n下载（0.8B）：https://huggingface.co/litert-community/Qwen3.5-0.8B\n下载（2B）：https://huggingface.co/litert-community/Qwen3.5-2B\n国内镜像：https://hf-mirror.com/litert-community/Qwen3.5-0.8B\n\n安装方式：\n1. 下载 .litertlm 文件（或复制直链）；\n2. 在本页「从文件导入」，或填写直链「从网址下载」。\n\n模型保存在应用私有目录，卸载应用即删除。未安装模型时，「自动添加标签」会退化为启发式标签（颜色 / 亮度 / 横竖版 / EXIF / 时长等本地特征）。</string>
     <string name="confirm">确定</string>
 
     <!-- 文件信息 -->
