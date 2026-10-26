@@ -11,7 +11,6 @@
     <!-- 首页「显示/隐藏标签」 -->
     <string name="show_tags">显示标签</string>
     <string name="hide_tags">隐藏标签</string>
-    <string name="grid_tag_more">+%1$d</string>
 
     <!-- 首页多选 -->
     <string name="selected">已选中</string>

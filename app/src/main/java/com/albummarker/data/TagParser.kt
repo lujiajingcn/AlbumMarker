@@ -33,4 +33,24 @@ object TagParser {
         val existingLower = existingTags.mapTo(HashSet()) { it.lowercase() }
         return incoming.filter { it.lowercase() !in existingLower }
     }
+
+    /** 自动打标模型可能输出的分类前缀，如「场景：公园」「主要对象：树木」。 */
+    private val CATEGORY_PREFIX = Regex(
+        "^\\s*(?:" +
+            "场景或地点|场景|地点|" +
+            "主要对象|对象|主体|" +
+            "动作或事件|动作|事件|" +
+            "明显属性(?:（[^）]*）|\\([^)]*\\))?|属性|" +
+            "颜色|天气|时间段|时间|" +
+            "内容类别|类别|类型" +
+            ")\\s*[：:]\\s*"
+    )
+
+    /** 去掉标签开头的分类前缀；没有前缀时原样返回。 */
+    fun stripCategoryPrefix(raw: String): String {
+        var text = raw.trim()
+        // 最多剥两层，兼容「场景：主要对象：树木」这类重复前缀
+        repeat(2) { text = text.replace(CATEGORY_PREFIX, "").trim() }
+        return text
+    }
 }

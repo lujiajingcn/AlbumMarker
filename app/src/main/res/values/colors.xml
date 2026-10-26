@@ -3,6 +3,4 @@
     <color name="tag_source_manual">#6750A4</color>
     <color name="tag_source_auto">#2E7D32</color>
     <color name="tag_source_heuristic">#0277BD</color>
-    <!-- 网格上「还有 N 个标签」的溢出标记 -->
-    <color name="tag_source_more">#616161</color>
 </resources>

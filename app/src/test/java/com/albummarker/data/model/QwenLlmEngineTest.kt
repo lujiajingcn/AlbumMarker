@@ -1,5 +1,6 @@
 package com.albummarker.data.model
 
+import com.albummarker.data.TagParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,5 +46,22 @@ class QwenLlmEngineTest {
             AutoTagEngine.normalize(listOf("a", "b", "c", "d")),
         )
         assertTrue(AutoTagEngine.normalize(listOf(" ", "  ", "")).isEmpty())
+    }
+
+    @Test
+    fun ` normalize strips category prefixes `() {
+        assertEquals(
+            listOf("公园", "树木", "绿色"),
+            AutoTagEngine.normalize(listOf("场景：公园", "主要对象：树木", "明显属性：绿色")),
+        )
+        assertEquals(
+            listOf("警示标识"),
+            AutoTagEngine.normalize(listOf("内容类别：警示标识")),
+        )
+        assertEquals(
+            listOf("公园"),
+            AutoTagEngine.normalize(listOf("场景：公园", "公园")),
+        )
+        assertEquals("公园", TagParser.stripCategoryPrefix("场景：公园"))
     }
 }

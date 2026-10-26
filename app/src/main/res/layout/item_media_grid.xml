@@ -45,19 +45,25 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- 标签浮层：首页「更多 → 显示标签」时出现，锚在缩略图左上角，
-         避开左下角的视频时长角标 -->
-    <LinearLayout
+    <!-- 标签浮层：覆盖在缩略图上，所有标签由 ChipGroup 自动换行；
+         不担心遮挡图片，标签多时允许向下延伸 -->
+    <com.google.android.material.chip.ChipGroup
         android:id="@+id/tagRow"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="4dp"
         android:layout_marginTop="4dp"
-        android:orientation="horizontal"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="4dp"
         android:visibility="gone"
+        app:chipSpacingHorizontal="2dp"
+        app:chipSpacingVertical="2dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="@id/ivThumb"
         app:layout_constraintStart_toStartOf="@id/ivThumb"
-        app:layout_constraintTop_toTopOf="@id/ivThumb" />
+        app:layout_constraintTop_toTopOf="@id/ivThumb"
+        app:singleLine="false"
+        app:singleSelection="false" />
 
     <!-- 多选角标：右上角，蓝色圆底 + 白勾 -->
     <ImageView

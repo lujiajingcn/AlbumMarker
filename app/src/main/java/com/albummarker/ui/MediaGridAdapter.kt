@@ -3,6 +3,7 @@ package com.albummarker.ui
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import android.widget.TextView
@@ -86,7 +87,7 @@ class MediaGridAdapter(
             }
         }
 
-        /** 渲染标签浮层；视图复用时先清干净，避免上一个 item 的残留。 */
+        /** 渲染标签区；所有标签都展示，ChipGroup 负责自动换行。 */
         private fun bindTags(tags: List<TagEntry>) {
             binding.tagRow.removeAllViews()
             if (tags.isEmpty()) {
@@ -95,33 +96,32 @@ class MediaGridAdapter(
             }
             binding.tagRow.isVisible = true
             val context = binding.root.context
-            val inflater = LayoutInflater.from(context)
-            GridTagDisplay.plan(tags) { n ->
-                context.getString(R.string.grid_tag_more, n)
-            }.forEach { chip ->
-                val color = if (chip.isOverflow) {
-                    ContextCompat.getColor(context, R.color.tag_source_more)
-                } else {
-                    colorOf(context, chip.source!!)
-                }
-                binding.tagRow.addView(newChip(inflater, context, chip.text, color))
+            GridTagDisplay.plan(tags).forEach { chip ->
+                val color = colorOf(context, chip.source)
+                binding.tagRow.addView(newChip(context, chip.text, color))
             }
         }
 
-        private fun newChip(
-            inflater: LayoutInflater,
-            context: Context,
-            text: String,
-            color: Int,
-        ): TextView {
-            val chip = inflater.inflate(
-                R.layout.item_grid_tag_chip, binding.tagRow, false
-            ) as TextView
-            chip.text = text
-            chip.setTextColor(Color.WHITE)
-            chip.backgroundTintList = ColorStateList.valueOf(color)
-            return chip
-        }
+        private fun newChip(context: Context, text: String, color: Int): TextView =
+            TextView(context).apply {
+                this.text = text
+                setTextColor(Color.WHITE)
+                // 20sp 的 75% = 15sp
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setPadding(dp(6f).toInt(), dp(1f).toInt(), dp(6f).toInt(), dp(1f).toInt())
+                // 不省略、不限制单行：长标签自动换行，完整展示内容
+                isSingleLine = false
+                background = ContextCompat.getDrawable(context, R.drawable.bg_grid_tag_chip)
+                    ?.mutate()
+                backgroundTintList = ColorStateList.valueOf(color)
+                layoutParams = ViewGroup.MarginLayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(2f).toInt() }
+            }
+
+        private fun dp(value: Float): Float =
+            value * binding.root.resources.displayMetrics.density
 
         private fun colorOf(context: Context, source: String): Int =
             ContextCompat.getColor(

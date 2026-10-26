@@ -2,6 +2,7 @@ package com.albummarker.data.model
 
 import android.graphics.Bitmap
 import com.albummarker.data.ExifFacts
+import com.albummarker.data.TagParser
 import com.albummarker.data.VideoFacts
 
 /** 自动打标的输入：若干帧位图 + 可选 EXIF / 视频元信息。 */
@@ -33,12 +34,12 @@ interface AutoTagEngine {
         const val MAX_AUTO_TAGS = 3
 
         /**
-         * 统一约束自动标签：去空白、去重（大小写不敏感）、最多 3 个。
-         * 允许 0 个（模型没有把握时不强行编造标签）。
+         * 统一约束自动标签：去掉「场景：」「主要对象：」等分类前缀、去空白、
+         * 去重（大小写不敏感）、最多 3 个。允许 0 个。
          */
         fun normalize(tags: List<String>): List<String> =
             tags.asSequence()
-                .map { it.trim() }
+                .map { TagParser.stripCategoryPrefix(it) }
                 .filter { it.isNotEmpty() }
                 .distinctBy { it.lowercase() }
                 .take(MAX_AUTO_TAGS)

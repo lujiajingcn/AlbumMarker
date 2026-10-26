@@ -32,6 +32,8 @@ object Graph {
         tagStore = TagStore(context.applicationContext)
         // 全表标签读取不阻塞 Application.onCreate / 首帧；UI 通过 tagsFlow 订阅结果。
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // 清理旧版本自动标签里的「场景：」「主要对象：」等前缀，再加载到内存。
+            tagStore.cleanAutoTagPrefixes()
             tagStore.loadAll()
         }
         modelManager = ModelManager(context.applicationContext).also { it.refresh() }

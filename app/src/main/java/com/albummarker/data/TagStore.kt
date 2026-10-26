@@ -355,6 +355,47 @@ class TagStore(context: Context) :
         return result
     }
 
+    /**
+     * 清理历史自动标签里的分类前缀（如「场景：公园」→「公园」）。
+     * 只处理 source=auto，手动标签保持原样；冲突时保留已存在的干净标签。
+     * @return 被修改/删除的行数
+     */
+    fun cleanAutoTagPrefixes(): Int {
+        val rows = mutableListOf<Pair<String, String>>()
+        readableDatabase.rawQuery(
+            "SELECT hash, tag FROM $TABLE_TAGS WHERE source = ?",
+            arrayOf(TagEntry.SOURCE_AUTO)
+        ).use { c ->
+            while (c.moveToNext()) rows.add(c.getString(0) to c.getString(1))
+        }
+        if (rows.isEmpty()) return 0
+
+        val db = writableDatabase
+        var changed = 0
+        db.beginTransaction()
+        try {
+            for ((hash, tag) in rows) {
+                val clean = TagParser.stripCategoryPrefix(tag)
+                if (clean == tag) continue
+                val alreadyExists = clean.isNotEmpty() && db.rawQuery(
+                    "SELECT 1 FROM $TABLE_TAGS WHERE hash = ? AND tag = ?",
+                    arrayOf(hash, clean)
+                ).use { it.moveToFirst() }
+                if (clean.isEmpty() || alreadyExists) {
+                    db.delete(TABLE_TAGS, "hash = ? AND tag = ?", arrayOf(hash, tag))
+                } else {
+                    val values = ContentValues().apply { put("tag", clean) }
+                    db.update(TABLE_TAGS, values, "hash = ? AND tag = ?", arrayOf(hash, tag))
+                }
+                changed++
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return changed
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
