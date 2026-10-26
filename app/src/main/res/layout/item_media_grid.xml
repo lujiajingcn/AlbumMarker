@@ -58,10 +58,10 @@
         android:visibility="gone"
         app:chipSpacingHorizontal="2dp"
         app:chipSpacingVertical="2dp"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="@id/ivThumb"
         app:layout_constraintStart_toStartOf="@id/ivThumb"
         app:layout_constraintTop_toTopOf="@id/ivThumb"
+        app:layout_constraintVertical_bias="0"
         app:singleLine="false"
         app:singleSelection="false" />
 

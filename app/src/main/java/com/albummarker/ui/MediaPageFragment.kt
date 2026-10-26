@@ -22,6 +22,11 @@ import kotlin.math.abs
  * 单个媒体的全屏页：图片用 ZoomableImageView（双击/捏合缩放），
  * 视频用 VideoView + 自定义播放控件（播放/暂停 + 进度条）。
  */
+interface MediaPageHost {
+    /** 图片页向上滑动时，等同于点击底部「手动添加标签」。 */
+    fun onManualTagSwipeUp()
+}
+
 class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
 
     companion object {
@@ -72,19 +77,22 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
             )
         }
         b.pbPageLoading.isVisible = false
-        setupSwipeDownToDismiss(b)
+        setupSwipeGestures(b)
     }
 
     /**
-     * 图片页下拉返回：未放大时向下拖动跟手，超过约 12% 屏高（或快速下甩）松手关闭查看器；
-     * 放大状态下仍由 ZoomableImageView 负责拖动画布，不触发返回。
+     * 图片页手势：
+     * - 下拉返回：未放大时向下拖动跟手，超过约 12% 屏高（或快速下甩）松手关闭查看器；
+     * - 上划手动标签：未放大时向上快速滑动，等同于点击「手动添加标签」。
+     * 放大状态下仍由 ZoomableImageView 负责拖动画布，不触发这两个动作。
      */
-    private fun setupSwipeDownToDismiss(b: FragmentMediaPageBinding) {
+    private fun setupSwipeGestures(b: FragmentMediaPageBinding) {
         val photo = b.ivPhoto
         var downX = 0f
         var downY = 0f
         var tracking = false
         var active = false
+        var swipeUp = false
         val slop = ViewConfiguration.get(requireContext()).scaledTouchSlop
 
         photo.setOnTouchListener { view, event ->
@@ -94,14 +102,16 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
                     downY = event.rawY
                     tracking = !photo.isZoomed
                     active = false
+                    swipeUp = false
                     swipeVelocity?.recycle()
                     swipeVelocity = VelocityTracker.obtain().apply { addMovement(event) }
                 }
 
                 MotionEvent.ACTION_POINTER_DOWN -> {
-                    // 双指缩放优先，取消下拉判定
+                    // 双指缩放优先，取消下拉/上划判定
                     tracking = false
                     active = false
+                    swipeUp = false
                     view.animate().cancel()
                     view.translationY = 0f
                     view.alpha = 1f
@@ -112,7 +122,13 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
                     if (!tracking) return@setOnTouchListener false
                     val dy = event.rawY - downY
                     val dx = event.rawX - downX
-                    if (!active && dy > slop && abs(dy) > abs(dx)) active = true
+                    if (!active && !swipeUp) {
+                        if (dy > slop && abs(dy) > abs(dx)) {
+                            active = true
+                        } else if (dy < -slop && abs(dy) > abs(dx)) {
+                            swipeUp = true
+                        }
+                    }
                     if (active) {
                         val offset = dy.coerceAtLeast(0f)
                         view.translationY = offset
@@ -126,7 +142,12 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
                     val velocityY = swipeVelocity?.yVelocity ?: 0f
                     swipeVelocity?.recycle()
                     swipeVelocity = null
-                    if (active) {
+                    if (swipeUp) {
+                        val draggedUp = downY - event.rawY
+                        if (draggedUp > view.height * 0.12f || velocityY < -1200f) {
+                            (activity as? MediaPageHost)?.onManualTagSwipeUp()
+                        }
+                    } else if (active) {
                         val dragged = view.translationY
                         if (dragged > view.height * 0.12f || velocityY > 1200f) {
                             view.animate()
@@ -141,6 +162,7 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
                     }
                     tracking = false
                     active = false
+                    swipeUp = false
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
@@ -151,6 +173,7 @@ class MediaPageFragment : Fragment(R.layout.fragment_media_page) {
                     }
                     tracking = false
                     active = false
+                    swipeUp = false
                 }
             }
             false

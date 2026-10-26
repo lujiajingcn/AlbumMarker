@@ -30,6 +30,7 @@ import com.albummarker.data.TagEntry
 import com.albummarker.data.TagParser
 import com.albummarker.data.model.AutoTagEngine
 import com.albummarker.databinding.ActivityMediaViewerBinding
+import com.albummarker.ui.MediaPageHost
 import com.albummarker.ui.MediaPagerAdapter
 import com.albummarker.ui.ModelPickerDialog
 import com.albummarker.ui.TagTreeAdapter
@@ -53,7 +54,7 @@ import java.util.Locale
  *  - 手动：菜单栏上方滑出输入面板（语音输入图标 + 确认图标）；
  *  - 标签以文件 SHA-256 哈希为键存入本地数据库。
  */
-class MediaViewerActivity : AppCompatActivity() {
+class MediaViewerActivity : AppCompatActivity(), MediaPageHost {
 
     companion object {
         private const val TAG = "AlbumMarker"
@@ -253,6 +254,11 @@ class MediaViewerActivity : AppCompatActivity() {
     }
 
     // ---- 手动添加标签 ----
+
+    /** 图片页上划：与点击「手动添加标签」完全等价（打开/收起面板）。 */
+    override fun onManualTagSwipeUp() {
+        toggleManualPanel()
+    }
 
     private fun toggleManualPanel() {
         if (panelVisible) collapseManualPanel() else expandManualPanel()
