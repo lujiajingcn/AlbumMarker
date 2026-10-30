@@ -12,6 +12,7 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.dispose
 import coil.load
 import com.albummarker.R
 import com.albummarker.data.GridTagDisplay
@@ -50,26 +51,36 @@ class MediaGridAdapter(
             val media = item.item
             binding.videoBadge.isVisible = media.isVideo
             binding.tvDuration.text = MediaQuery.formatDuration(media.durationMs)
-            binding.ivThumb.setImageDrawable(null)
             // 复用校验用 uri 而不是 id：图片表与视频表的 _ID 各自独立编号，会撞号
             // （如 图片 /images/media/5 与 视频 /video/media/5），撞号会让视频
             // 缩略图贴到图片的位置上。
-            binding.ivThumb.tag = media.uri.toString()
+            val token = media.uri.toString()
+            binding.ivThumb.tag = token
+            // 必须取消这条 ImageView 上挂起的 Coil 请求：
+            // 格子从「照片」复用成「视频」时，那条照片的 Coil 请求可能还在路上，
+            // 迟到后直接贴到视频格子上。tag 校验只拦得住我们自己的写入，
+            // 拦不住 Coil 往同一个 ImageView 上落图。
+            // dispose() 只负责取消请求（coil 2.5 里 clear() 已废弃），
+            // 图像要自己清空。
+            binding.ivThumb.dispose()
+            binding.ivThumb.setImageDrawable(null)
             if (media.isVideo) {
                 scope.launch {
-                    val bmp = MediaBitmaps.thumbnail(binding.root.context, media)
-                    // View 可能已被复用：仅当 tag 仍对得上时才落图
-                    if (binding.ivThumb.tag == media.uri.toString() && bmp != null) {
+                    val bmp = MediaBitmaps.thumbnail(binding.root.context, media, GRID_THUMB_PX)
+                    // View 可能已被复用：仅当 tag 仍对得上时才落图。
+                    // tag 对不上时**不要 recycle** —— 抽帧结果可能来自 LruCache，
+                    // 回收会让缓存里留下已回收的 Bitmap，下次显示直接崩。
+                    if (binding.ivThumb.tag == token) {
+                        // 抽帧与系统缩略图都失败时 bmp 为 null，
+                        // 这里同样要写一次，把上面清空后的空态保持住，
+                        // 绝不能让上一张残留下来冒充封面。
                         binding.ivThumb.setImageBitmap(bmp)
-                    } else {
-                        // 已经不属于这个 item 的缩略图要立即释放，避免快速滚动时堆积
-                        bmp?.recycle()
                     }
                 }
             } else {
                 binding.ivThumb.load(media.uri) {
                     crossfade(true)
-                    size(360)
+                    size(GRID_THUMB_PX)
                 }
             }
             bindTags(item.tags)
@@ -151,6 +162,12 @@ class MediaGridAdapter(
     }
 
     companion object {
+        /**
+         * 网格缩略图的目标边长（px）。
+         * 3 列布局下 360 足够清晰，也控制视频抽帧的内存与耗时。
+         */
+        private const val GRID_THUMB_PX = 360
+
         private val DIFF = object : DiffUtil.ItemCallback<MediaGridItem>() {
             override fun areItemsTheSame(oldItem: MediaGridItem, newItem: MediaGridItem) =
                 oldItem.item.id == newItem.item.id && oldItem.item.uri == newItem.item.uri

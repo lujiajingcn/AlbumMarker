@@ -7,6 +7,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.util.LruCache
 import android.util.Size
 import androidx.exifinterface.media.ExifInterface
 import kotlinx.coroutines.Dispatchers
@@ -15,31 +16,100 @@ import kotlinx.coroutines.withContext
 /** 媒体位图加载：网格缩略图 + 自动打标用的降采样帧。 */
 object MediaBitmaps {
 
+    /** 视频封面内存缓存上限（字节）。360px 的帧约 0.5MB，16MB 够放三十多张。 */
+    private const val VIDEO_THUMB_CACHE_BYTES = 16 * 1024 * 1024
+
     /**
-     * 网格缩略图。API 29+ 用 contentResolver.loadThumbnail；
-     * 更早版本回退到已弃用的 MediaStore.Thumbnails（仍可用）。
+     * 视频封面缓存。
+     *
+     * 抽帧比读 MediaStore 缩略图慢，网格滚动时同一条视频会被反复绑定，
+     * 不缓存的话每次都要重新解码，滚动会卡。
+     *
+     * 注意：这里**不回收**被淘汰的 Bitmap（entryRemoved 保持默认空实现）——
+     * 它可能还挂在某个 ImageView 上显示，主动 recycle 会导致
+     * "Canvas: trying to use a recycled bitmap" 崩溃。同理，**拿到缓存实例的
+     * 调用方也不能 recycle 它**，交给 GC 处理。
+     */
+    private val videoThumbCache = object : LruCache<String, Bitmap>(VIDEO_THUMB_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    /**
+     * 网格缩略图。
+     *
+     * 视频**不优先**走 [android.content.ContentResolver.loadThumbnail]：
+     * 实测（2026-10-30）手机自带剪辑软件导出的新视频，loadThumbnail 会返回
+     * 与文件内容完全无关的陈旧封面（时长等元数据却是对的），或者直接抛异常
+     * 被吞掉导致格子留空。
+     *
+     * 根因是它读 MediaStore 的 `thumbnails` 缓存表，该表以 `_ID` 为键；
+     * 抖音下载 / 系统剪辑会不断「建了又删」文件，`_ID` 被复用后旧缩略图行
+     * 可能还在，于是取到另一条媒体的封面。改为直接从视频文件抽帧，
+     * 内容必然与文件一致；系统缩略图仅在抽帧失败时兜底。
      */
     suspend fun thumbnail(context: Context, item: MediaItem, targetPx: Int = 512): Bitmap? =
         withContext(Dispatchers.IO) {
-            runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    context.contentResolver.loadThumbnail(item.uri, Size(targetPx, targetPx), null)
-                } else {
-                    @Suppress("DEPRECATION")
-                    if (item.isVideo) {
-                        MediaStore.Video.Thumbnails.getThumbnail(
-                            context.contentResolver, item.id,
-                            MediaStore.Video.Thumbnails.MINI_KIND, null
-                        )
-                    } else {
-                        MediaStore.Images.Thumbnails.getThumbnail(
-                            context.contentResolver, item.id,
-                            MediaStore.Images.Thumbnails.MINI_KIND, null
-                        )
-                    }
-                }
-            }.getOrNull()
+            if (item.isVideo) {
+                videoThumbnail(context, item, targetPx)
+                    ?: systemThumbnail(context, item, targetPx)
+            } else {
+                systemThumbnail(context, item, targetPx)
+            }
         }
+
+    /**
+     * 直接调系统缩略图。
+     * API 29+ 用 contentResolver.loadThumbnail；更早版本回退到已弃用的
+     * MediaStore.Thumbnails（仍可用）。
+     */
+    private fun systemThumbnail(context: Context, item: MediaItem, targetPx: Int): Bitmap? =
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                context.contentResolver.loadThumbnail(item.uri, Size(targetPx, targetPx), null)
+            } else {
+                @Suppress("DEPRECATION")
+                if (item.isVideo) {
+                    MediaStore.Video.Thumbnails.getThumbnail(
+                        context.contentResolver, item.id,
+                        MediaStore.Video.Thumbnails.MINI_KIND, null
+                    )
+                } else {
+                    MediaStore.Images.Thumbnails.getThumbnail(
+                        context.contentResolver, item.id,
+                        MediaStore.Images.Thumbnails.MINI_KIND, null
+                    )
+                }
+            }
+        }.getOrNull()
+
+    /**
+     * 直接从视频文件抽一帧当封面。
+     *
+     * 取第 1 秒的帧：既避开不少视频开头的纯黑画面，又与系统相册的封面习惯一致；
+     * 不足 2 秒的短视频取首帧。
+     */
+    private fun videoThumbnail(context: Context, item: MediaItem, targetPx: Int): Bitmap? {
+        // key 带上修改时间：同一 Uri 的文件被重新导入/覆盖后不会命中旧封面
+        val key = "${item.uri}@${item.dateModifiedSec}@$targetPx"
+        videoThumbCache.get(key)?.let { return it }
+
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, item.uri)
+            val durationMs = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: item.durationMs
+            val positionUs = if (durationMs > 2_000) 1_000_000L else 0L
+            val frame = retriever.getFrameAtTime(
+                positionUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+            ) ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            frame?.let { scaleDown(it, targetPx) }?.also { videoThumbCache.put(key, it) }
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
 
     /** 完整解码图片并缩放到 maxDim 以内，同时按 EXIF 方向旋转。 */
     suspend fun bitmapForImage(
